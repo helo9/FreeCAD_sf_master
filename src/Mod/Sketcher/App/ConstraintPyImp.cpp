@@ -21,7 +21,7 @@
  ***************************************************************************/
 
 #include "PreCompiled.h"
-#include <strstream>
+#include <sstream>
 #include "Mod/Sketcher/App/Constraint.h"
 
 // inclusion of the generated files (generated out of ConstraintPy.xml)
@@ -51,7 +51,7 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
     int  SecondIndex= Constraint::GeoUndef;
     int  SecondPos  = none;
     int  ThirdIndex = Constraint::GeoUndef;
-  //int  ThirdPos   = none;
+    int  ThirdPos   = none;
     double Value    = 0;
     // Note: In Python 2.x PyArg_ParseTuple prints a warning if a float is given but an integer is expected.
     // This means we must use a PyObject and check afterwards if it's a float or integer.
@@ -101,7 +101,7 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
             }
         }
         // ConstraintType, GeoIndex, Value
-        else if (PyFloat_Check(index_or_value)) {
+        if (PyNumber_Check(index_or_value)) { // can be float or int
             Value = PyFloat_AsDouble(index_or_value);
             bool valid = false;
             if (strcmp("Distance",ConstraintType) == 0 ) {
@@ -160,7 +160,7 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
         }
         // ConstraintType, GeoIndex1, GeoIndex2, Value
         // ConstraintType, GeoIndex, PosIndex, Value
-        else if (PyFloat_Check(index_or_value)) {
+        if (PyNumber_Check(index_or_value)) { // can be float or int
             SecondIndex = any_index;
             Value = PyFloat_AsDouble(index_or_value);
             //if (strcmp("Distance",ConstraintType) == 0) {
@@ -234,7 +234,7 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
             }
         }
         // ConstraintType, GeoIndex1, PosIndex1, GeoIndex2, Value
-        else if (PyFloat_Check(index_or_value)) {
+        if (PyNumber_Check(index_or_value)) { // can be float or int
             Value = PyFloat_AsDouble(index_or_value);
             if (strcmp("Distance",ConstraintType) == 0 ) {
                 this->getConstraintPtr()->Type = Distance;
@@ -263,7 +263,7 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
             }
         }
         // ConstraintType, GeoIndex1, PosIndex1, GeoIndex2, PosIndex2, Value
-        else if (PyFloat_Check(index_or_value)) {
+        if (PyNumber_Check(index_or_value)) { // can be float or int
             Value = PyFloat_AsDouble(index_or_value);
             bool valid=false;
             if (strcmp("Distance",ConstraintType) == 0 ) {
@@ -292,10 +292,31 @@ int ConstraintPy::PyInit(PyObject* args, PyObject* /*kwd*/)
             }
         }
     }
+    PyErr_Clear();
 
-    PyErr_SetString(PyExc_TypeError, "Constraint constructor accepts:\n"
-    "-- empty parameter list\n"
-    "-- Constraint type and index\n");
+    if (PyArg_ParseTuple(args, "siiiiii", &ConstraintType, &FirstIndex, &FirstPos, &SecondIndex, &SecondPos, &ThirdIndex, &ThirdPos)) {
+        // ConstraintType, GeoIndex1, PosIndex1, GeoIndex2, PosIndex2, GeoIndex3, PosIndex3
+        if (strcmp("Symmetric",ConstraintType) == 0 ) {
+            this->getConstraintPtr()->Type = Symmetric;
+            this->getConstraintPtr()->First     = FirstIndex;
+            this->getConstraintPtr()->FirstPos  = (Sketcher::PointPos) FirstPos;
+            this->getConstraintPtr()->Second    = SecondIndex;
+            this->getConstraintPtr()->SecondPos = (Sketcher::PointPos) SecondPos;
+            this->getConstraintPtr()->Third     = ThirdIndex;
+            this->getConstraintPtr()->ThirdPos  = (Sketcher::PointPos) ThirdPos;
+            return 0;
+        }
+    }
+
+    std::stringstream str;
+    str << "Invalid parameters: ";
+    Py::Tuple tuple(args);
+    str << tuple.as_string() << std::endl;
+    str << "Constraint constructor accepts:" << std::endl
+        << "-- empty parameter list" << std::endl
+        << "-- Constraint type and index" << std::endl;
+
+    PyErr_SetString(PyExc_TypeError, str.str().c_str());
     return -1;
 }
 

@@ -69,7 +69,7 @@ LoftWidget::LoftWidget(QWidget* parent)
     Gui::Application::Instance->runPythonCode("import Part");
 
     d->ui.setupUi(this);
-    d->ui.selector->setAvailableLabel(tr("Vertex/Wire"));
+    d->ui.selector->setAvailableLabel(tr("Vertex/Edge/Wire/Face"));
     d->ui.selector->setSelectedLabel(tr("Loft"));
 
     connect(d->ui.selector->availableTreeWidget(), SIGNAL(currentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)),
@@ -98,7 +98,8 @@ void LoftWidget::findShapes()
         const TopoDS_Shape& shape = (*it)->Shape.getValue();
         if (shape.IsNull()) continue;
 
-        if (shape.ShapeType() == TopAbs_WIRE ||
+        if (shape.ShapeType() == TopAbs_FACE ||
+            shape.ShapeType() == TopAbs_WIRE ||
             shape.ShapeType() == TopAbs_EDGE ||
             shape.ShapeType() == TopAbs_VERTEX) {
             QString label = QString::fromUtf8((*it)->Label.getValue());
@@ -132,7 +133,7 @@ bool LoftWidget::accept()
 
     int count = d->ui.selector->selectedTreeWidget()->topLevelItemCount();
     if (count < 2) {
-        QMessageBox::critical(this, tr("Too few elements"), tr("At least two vertices, edges or wires are required."));
+        QMessageBox::critical(this, tr("Too few elements"), tr("At least two vertices, edges, wires or faces are required."));
         return false;
     }
     for (int i=0; i<count; i++) {
@@ -154,11 +155,17 @@ bool LoftWidget::accept()
         if (!doc) throw Base::Exception("Document doesn't exist anymore");
         doc->openCommand("Loft");
         Gui::Application::Instance->runPythonCode((const char*)cmd.toAscii(), false, false);
-        doc->commitCommand();
         doc->getDocument()->recompute();
+        App::DocumentObject* obj = doc->getDocument()->getActiveObject();
+        if (obj && !obj->isValid()) {
+            std::string msg = obj->getStatusString();
+            doc->abortCommand();
+            throw Base::Exception(msg);
+        }
+        doc->commitCommand();
     }
     catch (const Base::Exception& e) {
-        Base::Console().Error("%s\n", e.what());
+        QMessageBox::warning(this, tr("Input error"), QString::fromAscii(e.what()));
         return false;
     }
 
@@ -187,7 +194,7 @@ void LoftWidget::changeEvent(QEvent *e)
     QWidget::changeEvent(e);
     if (e->type() == QEvent::LanguageChange) {
         d->ui.retranslateUi(this);
-        d->ui.selector->setAvailableLabel(tr("Vertex/Wire"));
+        d->ui.selector->setAvailableLabel(tr("Vertex/Edge/Wire/Face"));
         d->ui.selector->setSelectedLabel(tr("Loft"));
     }
 }

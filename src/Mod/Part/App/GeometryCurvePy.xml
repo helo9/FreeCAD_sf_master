@@ -26,6 +26,12 @@
 				<UserDocu>Discretizes the curve using a given deflection or number of points and returns a list of points</UserDocu>
 			</Documentation>
 		</Methode>
+		<Methode Name="length">
+			<Documentation>
+				<UserDocu>Computes the length of a curve
+length([uMin,uMax,Tol]) -> Float</UserDocu>
+			</Documentation>
+		</Methode>
 		<Methode Name="value">
 			<Documentation>
 				<UserDocu>Computes the point of parameter u on this curve</UserDocu>
@@ -52,6 +58,22 @@
 of the nearest orthogonal projection of the point.</UserDocu>
 			</Documentation>
 		</Methode>
+		<Methode Name="toBSpline">
+			<Documentation>
+				<UserDocu>
+					Converts a curve of any type (only part from First to Last)
+					toBSpline([Float=First, Float=Last]) -> B-Spline curve
+				</UserDocu>
+			</Documentation>
+		</Methode>
+		<Attribute Name="Continuity" ReadOnly="true">
+			<Documentation>
+				<UserDocu>
+					Returns the global continuity of the curve.
+				</UserDocu>
+			</Documentation>
+			<Parameter Name="Continuity" Type="String"/>
+		</Attribute>
 		<Attribute Name="FirstParameter" ReadOnly="true">
 			<Documentation>
 				<UserDocu>

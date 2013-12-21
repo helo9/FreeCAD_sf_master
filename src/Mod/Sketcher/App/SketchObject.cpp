@@ -144,6 +144,31 @@ int SketchObject::hasConflicts(void) const
     return 0;
 }
 
+int SketchObject::solve()
+{
+    // set up a sketch (including dofs counting and diagnosing of conflicts)
+    Sketch sketch;
+    int dofs = sketch.setUpSketch(getCompleteGeometry(), Constraints.getValues(),
+                                  getExternalGeometryCount());
+    int err=0;
+    if (dofs < 0) // over-constrained sketch
+        err = -3;
+    else if (sketch.hasConflicts()) // conflicting constraints
+        err = -3;
+    else if (sketch.solve() != 0) // solving
+        err = -2;
+
+    if (err == 0) {
+        // set the newly solved geometry
+        std::vector<Part::Geometry *> geomlist = sketch.extractGeometry();
+        Geometry.setValues(geomlist);
+        for (std::vector<Part::Geometry *>::iterator it = geomlist.begin(); it != geomlist.end(); ++it)
+            if (*it) delete *it;
+    }
+
+    return err;
+}
+
 int SketchObject::setDatum(int ConstrId, double Datum)
 {
     // set the changed value for the constraint
@@ -170,26 +195,8 @@ int SketchObject::setDatum(int ConstrId, double Datum)
     this->Constraints.setValues(newVals);
     delete constNew;
 
-    // set up a sketch (including dofs counting and diagnosing of conflicts)
-    Sketch sketch;
-    int dofs = sketch.setUpSketch(getCompleteGeometry(), Constraints.getValues(),
-                                  getExternalGeometryCount());
-    int err=0;
-    if (dofs < 0) // over-constrained sketch
-        err = -3;
-    else if (sketch.hasConflicts()) // conflicting constraints
-        err = -3;
-    else if (sketch.solve() != 0) // solving
-        err = -2;
-
-    if (err == 0) {
-        // set the newly solved geometry
-        std::vector<Part::Geometry *> geomlist = sketch.extractGeometry();
-        Geometry.setValues(geomlist);
-        for (std::vector<Part::Geometry *>::iterator it = geomlist.begin(); it != geomlist.end(); ++it)
-            if (*it) delete *it;
-    }
-    else
+    int err = solve();
+    if (err)
         this->Constraints.setValues(vals);
 
     return err;
@@ -267,14 +274,10 @@ int SketchObject::getAxisCount(void) const
 
 Base::Axis SketchObject::getAxis(int axId) const
 {
-    const std::vector< Part::Geometry * > &vals = getInternalGeometry();
-    if (axId == H_Axis) {
-        return Base::Axis(Base::Vector3d(0,0,0), Base::Vector3d(1,0,0));
-    }
-    else if (axId == V_Axis) {
-        return Base::Axis(Base::Vector3d(0,0,0), Base::Vector3d(0,1,0));
-    }
+    if (axId == H_Axis || axId == V_Axis || axId == N_Axis)
+        return Part::Part2DObject::getAxis(axId);
 
+    const std::vector< Part::Geometry * > &vals = getInternalGeometry();
     int count=0;
     for (std::vector<Part::Geometry *>::const_iterator geo=vals.begin();
         geo != vals.end(); geo++)
@@ -372,9 +375,31 @@ int SketchObject::toggleConstruction(int GeoId)
     return 0;
 }
 
+int SketchObject::setConstruction(int GeoId, bool on)
+{
+    const std::vector< Part::Geometry * > &vals = getInternalGeometry();
+    if (GeoId < 0 || GeoId >= int(vals.size()))
+        return -1;
+
+    std::vector< Part::Geometry * > newVals(vals);
+
+    Part::Geometry *geoNew = newVals[GeoId]->clone();
+    geoNew->Construction = on;
+    newVals[GeoId]=geoNew;
+
+    this->Geometry.setValues(newVals);
+    this->Constraints.acceptGeometry(getCompleteGeometry());
+    return 0;
+}
+
 int SketchObject::addConstraints(const std::vector<Constraint *> &ConstraintList)
 {
-    return -1;
+    const std::vector< Constraint * > &vals = this->Constraints.getValues();
+
+    std::vector< Constraint * > newVals(vals);
+    newVals.insert(newVals.end(), ConstraintList.begin(), ConstraintList.end());
+    this->Constraints.setValues(newVals);
+    return this->Constraints.getSize()-1;
 }
 
 int SketchObject::addConstraint(const Constraint *constraint)
@@ -405,7 +430,11 @@ int SketchObject::delConstraintOnPoint(int VertexId, bool onlyCoincident)
 {
     int GeoId;
     PointPos PosId;
-    getGeoVertexIndex(VertexId, GeoId, PosId);
+    if (VertexId == -1) { // RootPoint
+        GeoId = -1;
+        PosId = start;
+    } else
+        getGeoVertexIndex(VertexId, GeoId, PosId);
     return delConstraintOnPoint(GeoId, PosId, onlyCoincident);
 }
 
@@ -1387,11 +1416,11 @@ void SketchObject::rebuildVertexIndex(void)
             VertexId2PosId.push_back(mid);
         } else if ((*it)->getTypeId() == Part::GeomArcOfCircle::getClassTypeId()) {
             VertexId2GeoId.push_back(i);
-            VertexId2PosId.push_back(mid);
-            VertexId2GeoId.push_back(i);
             VertexId2PosId.push_back(start);
             VertexId2GeoId.push_back(i);
             VertexId2PosId.push_back(end);
+            VertexId2GeoId.push_back(i);
+            VertexId2PosId.push_back(mid);
         }
     }
 }
@@ -1519,7 +1548,7 @@ void SketchObject::onFinishDuplicating()
     onDocumentRestored();
 }
 
-void SketchObject::getGeoVertexIndex(int VertexId, int &GeoId, PointPos &PosId)
+void SketchObject::getGeoVertexIndex(int VertexId, int &GeoId, PointPos &PosId) const
 {
     if (VertexId < 0 || VertexId >= int(VertexId2GeoId.size())) {
         GeoId = Constraint::GeoUndef;

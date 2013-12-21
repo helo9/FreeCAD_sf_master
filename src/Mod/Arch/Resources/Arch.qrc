@@ -29,23 +29,45 @@
         <file>icons/Arch_CloseHoles.svg</file>
         <file>icons/Arch_Check.svg</file>
         <file>icons/Arch_SelectNonManifold.svg</file>
+        <file>icons/Arch_MergeWalls.svg</file>
+        <file>icons/Arch_Wall_Tree_Assembly.svg</file>
+        <file>icons/Arch_Fixture.svg</file>
+        <file>icons/Arch_Space.svg</file>
+        <file>icons/Arch_Space_Tree.svg</file>
+        <file>icons/Arch_Stairs.svg</file>
+        <file>icons/Arch_Stairs_Tree.svg</file>
+        <file>icons/Arch_Rebar.svg</file>
+        <file>icons/Arch_Rebar_Tree.svg</file>
         <file>ui/archprefs-base.ui</file>
+        <file>ui/archprefs-import.ui</file>
+        <file>ui/ParametersWindowDouble.svg</file>
+        <file>ui/ParametersWindowSimple.svg</file>
+        <file>ui/ParametersWindowFixed.svg</file>
+        <file>ui/ParametersWindowStash.svg</file>
+        <file>ui/ParametersDoorSimple.svg</file>
+        <file>ui/ParametersDoorGlass.svg</file>
         <file>translations/Arch_af.qm</file>
         <file>translations/Arch_de.qm</file>
-        <file>translations/Arch_es.qm</file>
         <file>translations/Arch_fi.qm</file>
         <file>translations/Arch_fr.qm</file>
         <file>translations/Arch_it.qm</file>
         <file>translations/Arch_nl.qm</file>
         <file>translations/Arch_no.qm</file>
         <file>translations/Arch_ru.qm</file>
-        <file>translations/Arch_se.qm</file>
         <file>translations/Arch_uk.qm</file>
         <file>translations/Arch_pl.qm</file>
-        <file>translations/Arch_pt.qm</file>
         <file>translations/Arch_hr.qm</file>
-        <file>translations/Arch_zh.qm</file>
         <file>translations/Arch_ja.qm</file>
         <file>translations/Arch_hu.qm</file>
+        <file>translations/Arch_tr.qm</file>
+        <file>translations/Arch_sv-SE.qm</file>
+        <file>translations/Arch_zh-TW.qm</file>
+        <file>translations/Arch_pt-BR.qm</file>
+        <file>translations/Arch_cs.qm</file>
+        <file>translations/Arch_sk.qm</file>
+        <file>translations/Arch_es-ES.qm</file>
+        <file>translations/Arch_zh-CN.qm</file>
+        <file>translations/Arch_ro.qm</file>
+        <file>translations/Arch_pt-PT.qm</file>
     </qresource>
 </RCC> 

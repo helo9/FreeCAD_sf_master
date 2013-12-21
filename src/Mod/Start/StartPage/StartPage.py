@@ -1,3 +1,28 @@
+#***************************************************************************
+#*                                                                         *
+#*   Copyright (c) 2012                                                    * 
+#*   Yorik van Havre <yorik@uncreated.net>                                 * 
+#*                                                                         *
+#*   This program is free software; you can redistribute it and/or modify  *
+#*   it under the terms of the GNU Lesser General Public License (LGPL)    *
+#*   as published by the Free Software Foundation; either version 2 of     *
+#*   the License, or (at your option) any later version.                   *
+#*   for detail see the LICENCE text file.                                 *
+#*                                                                         *
+#*   This program is distributed in the hope that it will be useful,       *
+#*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+#*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+#*   GNU Library General Public License for more details.                  *
+#*                                                                         *
+#*   You should have received a copy of the GNU Library General Public     *
+#*   License along with this program; if not, write to the Free Software   *
+#*   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  *
+#*   USA                                                                   *
+#*                                                                         *
+#***************************************************************************
+
+# This is the start page template
+
 import os,FreeCAD,FreeCADGui,tempfile,time,zipfile,urllib,re,cStringIO
 from PyQt4 import QtGui
 from xml.etree.ElementTree import parse
@@ -59,7 +84,7 @@ text34 = translate("StartPage","creation time:")
 text35 = translate("StartPage","last modified:")
 text36 = translate("StartPage","location:")
 text37 = translate("StartPage","User manual")
-text38 = translate("StartPage","http://sourceforge.net/apps/mediawiki/free-cad/index.php?title=Online_Help_Toc")
+text38 = translate("StartPage","http://www.freecadweb.org/wiki/index.php?title=Online_Help_Toc")
 text39 = translate("StartPage","Tutorials")
 text40 = translate("StartPage","Python resources")
 text41 = translate("StartPage","File not found")
@@ -72,7 +97,11 @@ text47 = translate("StartPage","The section of the FreeCAd website dedicate dto 
 text48 = translate("StartPage","A blog dedicated to teaching FreeCAD, maintained by members of the FreeCAD community")
 text49 = translate("StartPage","Getting started")
 text50 = translate("StartPage","The FreeCAD interface is divided in workbenches, which are sets of tools suited for a specific task. You can start with one of the workbenches in this list, or with the complete workbench, which presents you with some of the most used tools gathered from other workbenches. Click to read more about workbenches on the FreeCAD website.")
-text51 = translate("StartPage","http://sourceforge.net/apps/mediawiki/free-cad/index.php?title=Workbench_Concept")
+text51 = translate("StartPage","http://www.freecadweb.org/wiki/index.php?title=Workbench_Concept")
+text52 = translate("StartPage","Ship Design")
+text53 = translate("StartPage","Designing and calculating ships")
+text54 = translate("StartPage","The <b>Ship Design</b> module offers several tools to help ship designers to view, model and calculate profiles and other specific properties of ship hulls.")
+text55 = translate("StartPage","Load an Architectural example model")
 
 # here is the html page skeleton
 
@@ -130,7 +159,7 @@ page = """
             ddiv.innerHTML = "Done fetching";
             ddiv = document.getElementById("news");
             ddiv.innerHTML = "Fetching data from the web...";
-            var tobj=new JSONscriptRequest('http://twitter.com/status/user_timeline/FreeCADNews.json?count=10&callback=showTweets');
+            var tobj=new JSONscriptRequest('http://pipes.yahoo.com/pipes/pipe.run?_id=da8b612e97a6bb4588b1ce27db30efd9&_render=json&_callback=showTweets');
             tobj.buildScriptTag(); // Build the script tag
             tobj.addScriptTag(); // Execute (add) the script tag
             ddiv.innerHTML = "Done fetching";
@@ -153,17 +182,11 @@ page = """
             ddiv = document.getElementById('news');
             ddiv.innerHTML = "Received";
             var html = ['<ul>'];
-            for (var i = 0; i < Math.min(5,data.length); i++) {
-                tf = placeLinks(data[i].text);
-                html.push('<li>',tf,'</li>');
+            for (var i = 0; i < 8; i++) {
+                html.push('<li><a href="', data.value.items[i].link, '">', data.value.items[i].title, '</a></li>');
             }
             html.push('</ul>');
             ddiv.innerHTML = html.join('');
-        }
-
-        function placeLinks(text) {
-            result=text.replace(/(https?:\/\/([-\w\.]+)+(:\d+)?(\/([\w\/_\.]*(\?\S+)?)?)?)/g,'<a href="$1">$1</a>');
-            return result;
         }
 
     </script>
@@ -257,12 +280,12 @@ page = """
       </div>
 
       <div class="block">
-        <h2>""" + text04 + """ <span class="from">""" + text44 + """</span></h2>
+        <h2>""" + text04 + """</h2>
         <div id="youtube">youtube videos</div>
       </div>
 
       <div class="block">
-        <h2>""" + text05 + """ <span class="from">""" + text42 + """</span></h2>
+        <h2>""" + text05 + """</h2>
         <div id="news">news feed</div>
       </div>
 
@@ -316,6 +339,7 @@ def getExamples():
         <li><img src="FreeCAD.png" style="width: 16px">&nbsp;<a href="LoadPartDesignExample.py">""" + text11 + """</a></li>
         <li><img src="FreeCAD.png" style="width: 16px">&nbsp;<a href="LoadDrawingExample.py">""" + text12 + """</a></li>
         <li><img src="FreeCAD.png" style="width: 16px">&nbsp;<a href="LoadRobotExample.py">""" + text13 + """</a></li>
+        <li><img src="FreeCAD.png" style="width: 16px">&nbsp;<a href="LoadArchExample.py">""" + text55 + """</a></li>
     </ul>"""
       
 def getLinks():
@@ -324,7 +348,7 @@ def getLinks():
         <li><img src="web.png">&nbsp;
             <a onMouseover="show('<p>""" + text07 + """</p>')" 
                 onMouseout="show('')"
-                href="http://free-cad.sf.net/">""" + text08 + """</a></li>
+                href="http://www.freecadweb.org/">""" + text08 + """</a></li>
         <li><img src="web.png">&nbsp;
             <a onMouseover="show('<p>""" + text45 + """</p>')" 
                 onMouseout="show('')"
@@ -332,11 +356,11 @@ def getLinks():
         <li><img src="web.png">&nbsp;
             <a onMouseover="show('<p>""" + text46 + """</p>')" 
                 onMouseout="show('')"
-                href="http://sourceforge.net/apps/mediawiki/free-cad/index.php?title=Tutorials">""" + text39 + """</a></li>
+                href="http://www.freecadweb.org/wiki/index.php?title=Tutorials">""" + text39 + """</a></li>
         <li><img src="web.png">&nbsp;
             <a onMouseover="show('<p>""" + text47 + """</p>')" 
                 onMouseout="show('')"
-                href="http://sourceforge.net/apps/mediawiki/free-cad/index.php?title=Power_users_hub">""" + text40 + """</a></li>
+                href="http://www.freecadweb.org/wiki/index.php?title=Power_users_hub">""" + text40 + """</a></li>
         <li><img src="web.png">&nbsp;
             <a onMouseover="show('<p>""" + text48 + """</p>')" 
                 onMouseout="show('')"
@@ -365,6 +389,13 @@ def getWorkbenches():
             :</small></p><img src=ArchExample.png>')" 
             onMouseout="show('')"
             href="ArchDesign.py">""" + text25 + """</a>
+        </li>
+        <li><img src="Ship.png">&nbsp;
+          <a onMouseover="show('<h3>""" + text53 + """</h3> \
+            <p>""" + text54 + """</p><p><small>""" + text21 + """ \
+            :</small></p><img src=ShipExample.png>')" 
+            onMouseout="show('')"
+            href="Ship.py">""" + text52 + """</a>
         </li>
         <li><img src="Mesh.png">&nbsp;
             <a onMouseover="show('<h3>""" + text26 + """</h3> \

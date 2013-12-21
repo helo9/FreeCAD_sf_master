@@ -28,9 +28,9 @@ from DraftTools import translate
 
 __title__="FreeCAD Roof"
 __author__ = "Yorik van Havre"
-__url__ = "http://free-cad.sourceforge.net"
+__url__ = "http://www.freecadweb.org"
 
-def makeRoof(baseobj,facenr=1,angle=45,name=str(translate("Arch","Roof"))):
+def makeRoof(baseobj=None,facenr=1,angle=45,name=str(translate("Arch","Roof"))):
     '''makeRoof(baseobj,[facenr],[angle],[name]) : Makes a roof based on a
     face from an existing object. You can provide the number of the face
     to build the roof on (default = 1), the angle (default=45) and a name (default
@@ -38,7 +38,8 @@ def makeRoof(baseobj,facenr=1,angle=45,name=str(translate("Arch","Roof"))):
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython",name)
     _Roof(obj)
     _ViewProviderRoof(obj.ViewObject)
-    obj.Base = baseobj
+    if baseobj:
+        obj.Base = baseobj
     obj.Face = facenr
     obj.Angle = angle
     return obj
@@ -51,17 +52,12 @@ class _CommandRoof:
                 'Accel': "R, F",
                 'ToolTip': QtCore.QT_TRANSLATE_NOOP("Arch_Roof","Creates a roof object from the selected face of an object")}
 
-    def IsActive(self):
-        if FreeCADGui.Selection.getSelection():
-            return True
-        else:
-            return False
-        
     def Activated(self):
         sel = FreeCADGui.Selection.getSelectionEx()
         if sel:
             sel = sel[0]
             obj = sel.Object
+            FreeCADGui.Control.closeDialog()
             if sel.HasSubObjects:
                 if "Face" in sel.SubElementNames[0]:
                     idx = int(sel.SubElementNames[0][4:])
@@ -82,7 +78,10 @@ class _CommandRoof:
             else:
                 FreeCAD.Console.PrintMessage(str(translate("Arch","Unable to create a roof")))
         else:
-            FreeCAD.Console.PrintMessage(str(translate("Arch","No object selected")))
+            FreeCAD.Console.PrintMessage(str(translate("Arch","Please select a base object\n")))
+            FreeCADGui.Control.showDialog(ArchComponent.SelectionTaskPanel())
+            FreeCAD.ArchObserver = ArchComponent.ArchSelectionObserver(nextCommand="Arch_Roof")
+            FreeCADGui.Selection.addObserver(FreeCAD.ArchObserver)
        
 class _Roof(ArchComponent.Component):
     "The Roof object"
@@ -92,12 +91,13 @@ class _Roof(ArchComponent.Component):
                         str(translate("Arch","The angle of this roof")))
         obj.addProperty("App::PropertyInteger","Face","Base",
                         str(translate("Arch","The face number of the base object used to build this roof")))
-        self.Type = "Structure"
+        self.Type = "Roof"
         
     def execute(self,obj):
         self.createGeometry(obj)
         
     def onChanged(self,obj,prop):
+        self.hideSubobjects(obj,prop)
         if prop in ["Base","Face","Angle","Additions","Subtractions"]:
             self.createGeometry(obj)
 
@@ -105,6 +105,7 @@ class _Roof(ArchComponent.Component):
         import Part, math, DraftGeomUtils
         pl = obj.Placement
 
+        base = None
         if obj.Base and obj.Angle:
             w = None
             if obj.Base.isDerivedFrom("Part::Feature"):
@@ -133,14 +134,18 @@ class _Roof(ArchComponent.Component):
                         dv.normalize()
                         dv.scale(d,d,d)
                         shps.append(f.extrude(dv))
-                    c = shps.pop()
+                    base = shps.pop()
                     for s in shps:
-                        c = c.common(s)
-                    c = c.removeSplitter()
-                    if not c.isNull():
-                        obj.Shape = c        
+                        base = base.common(s)
+                    base = base.removeSplitter()
+                    if not base.isNull():
                         if not DraftGeomUtils.isNull(pl):
-                            obj.Placement = pl
+                            base.Placement = pl
+                            
+        base = self.processSubShapes(obj,base)
+        if base:
+            if not base.isNull():
+                obj.Shape = base
 
 class _ViewProviderRoof(ArchComponent.ViewProviderComponent):
     "A View Provider for the Roof object"

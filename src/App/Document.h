@@ -71,11 +71,29 @@ public:
     /// creators name (utf-8)
     PropertyString CreatedBy;
     PropertyString CreationDate;
+    /// user last modified the document
     PropertyString LastModifiedBy;
     PropertyString LastModifiedDate;
+    /// company name UTF8(optional)
     PropertyString Company;
+    /// long comment or description (UTF8 with line breaks)
     PropertyString Comment;
+    /// Id e.g. Part number
     PropertyString Id;
+    /// unique identifier of the document
+    PropertyUUID   Uid;
+    /** License string
+      * Holds the short license string for the Item, e.g. CC-BY
+      * for the Creative Commons license suit. 
+      */
+    App::PropertyString  License;
+    /// License descripton/contract URL
+    App::PropertyString  LicenseURL;
+    /// Meta descriptons
+    App::PropertyMap     Meta;
+    /// Meta descriptons
+    App::PropertyMap     Material;
+    /// read-only name of the temp dir created wen the document is opened
     PropertyString TransientDir;
     //@}
 
@@ -92,6 +110,10 @@ public:
     boost::signal<void (const App::DocumentObject&)> signalRenamedObject;
     /// signal on activated Object
     boost::signal<void (const App::DocumentObject&)> signalActivatedObject;
+    /// signal on undo
+    boost::signal<void (const App::Document&)> signalUndo;
+    /// signal on redo
+    boost::signal<void (const App::Document&)> signalRedo;
     /** signal on load/save document
      * this signal is given when the document gets streamed.
      * you can use this hook to write additional information in 
@@ -111,11 +133,12 @@ public:
     //void saveAs (const char* Name);
     /// Save the document to the file in Property Path
     bool save (void);
+    bool saveAs(const char* file);
     /// Restore the document from the file in Property Path
     void restore (void);
     void exportObjects(const std::vector<App::DocumentObject*>&, std::ostream&);
     void exportGraphviz(std::ostream&);
-    std::vector<App::DocumentObject*> importObjects(std::istream&);
+    std::vector<App::DocumentObject*> importObjects(Base::XMLReader& reader);
     /// Opens the document from its file name
     //void open (void);
     /// Is the document already saved to a file
@@ -208,6 +231,8 @@ public:
     void commitTransaction();
     /// Abort the  actually running transaction. 
     void abortTransaction();
+    /// Check if a transaction is open
+    bool hasPendingTransaction() const;
     /// Set the Undo limit in Byte!
     void setUndoLimit(unsigned int UndoMemSize=0);
     /// Returns the actual memory consumption of the Undo redo stuff.
@@ -240,6 +265,10 @@ public:
     bool checkOnCycle(void);
     /// get a list of all objects linking to the given object
     std::vector<App::DocumentObject*> getInList(const DocumentObject* me) const;
+    /// Get a complete list of all objects the given objects depend on. The list
+    /// also contains the given objects!
+    std::vector<App::DocumentObject*> getDependencyList
+        (const std::vector<App::DocumentObject*>&) const;
     // set Changed
     //void setChanged(DocumentObject* change);
     //@}
@@ -264,8 +293,10 @@ protected:
     DocumentObject* _copyObject(DocumentObject* obj, std::map<DocumentObject*, 
         DocumentObject*>&, bool recursive=false, bool keepdigitsatend=false);
     /// checks if a valid transaction is open
-    void _checkTransaction(void);
+    void _checkTransaction(DocumentObject* pcObject);
     void breakDependency(DocumentObject* pcObject, bool clear);
+    std::vector<App::DocumentObject*> readObjects(Base::XMLReader& reader);
+    void writeObjects(const std::vector<App::DocumentObject*>&, Base::Writer &writer) const;
 
     void onChanged(const Property* prop);
     /// callback from the Document objects before property will be changed
@@ -275,6 +306,9 @@ protected:
     /// helper which Recompute only this feature
     bool _recomputeFeature(DocumentObject* Feat);
     void _clearRedos();
+    /// refresh the internal dependency graph
+    void _rebuildDependencyList(void);
+    std::string getTransientDirectoryName(const std::string& uuid, const std::string& filename) const;
 
 
 private:

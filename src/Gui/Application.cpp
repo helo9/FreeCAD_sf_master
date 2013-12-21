@@ -41,7 +41,10 @@
 # include <QGLFramebufferObject>
 #endif
 # include <QSessionManager>
+# include <QTextStream>
 #endif
+
+#include <boost/interprocess/sync/file_lock.hpp>
 
 
 // FreeCAD Base header
@@ -93,6 +96,9 @@
 #include "ViewProviderVRMLObject.h"
 #include "ViewProviderAnnotation.h"
 #include "ViewProviderMeasureDistance.h"
+#include "ViewProviderPlacement.h"
+#include "ViewProviderPlane.h"
+#include "ViewProviderMaterialObject.h"
 
 #include "Language/Translator.h"
 #include "TaskView/TaskDialogPython.h"
@@ -333,6 +339,18 @@ Application::Application(bool GUIenabled)
             ("User parameter:BaseApp/Preferences/Units");
         Base::UnitsApi::setDecimals(hUnits->GetInt("Decimals", Base::UnitsApi::getDecimals()));
 
+        // Check for the symbols for group separator and deciaml point. They must be different otherwise
+        // Qt doesn't work properly.
+#if defined(Q_OS_WIN32)
+        if (QLocale::system().groupSeparator() == QLocale::system().decimalPoint()) {
+            QMessageBox::critical(0, QLatin1String("Invalid system settings"),
+                QLatin1String("Your system uses the same symbol for decimal point and group separator.\n\n"
+                              "This causes serious problems and makes the application fail to work properly.\n"
+                              "Go to the system configuration panel of the OS and fix this issue, please."));
+            throw Base::Exception("Invalid system settings");
+        }
+#endif
+
         // setting up Python binding
         Base::PyGILStateLocker lock;
         PyObject* module = Py_InitModule3("FreeCADGui", Application::Methods,
@@ -447,6 +465,7 @@ Application::~Application()
 void Application::open(const char* FileName, const char* Module)
 {
     WaitCursor wc;
+    wc.setIgnoreEvents(WaitCursor::NoEvents);
     Base::FileInfo File(FileName);
     string te = File.extension();
 
@@ -489,6 +508,7 @@ void Application::open(const char* FileName, const char* Module)
 void Application::importFrom(const char* FileName, const char* DocName, const char* Module)
 {
     WaitCursor wc;
+    wc.setIgnoreEvents(WaitCursor::NoEvents);
     Base::FileInfo File(FileName);
     std::string te = File.extension();
 
@@ -727,31 +747,35 @@ void Application::setActiveDocument(Gui::Document* pcDocument)
             return;
     }
     d->activeDocument = pcDocument;
-    std::string name;
+    std::string nameApp, nameGui;
  
     // This adds just a line to the macro file but does not set the active document
+    // Macro recording of this is problematic, thus it's written out as comment.
     if (pcDocument){
-        name += "App.setActiveDocument(\"";
-        name += pcDocument->getDocument()->getName(); 
-        name +=  "\")\n";
-        name += "App.ActiveDocument=App.getDocument(\"";
-        name += pcDocument->getDocument()->getName(); 
-        name +=  "\")\n";
-        name += "Gui.ActiveDocument=Gui.getDocument(\"";
-        name += pcDocument->getDocument()->getName(); 
-        name +=  "\")";
-        macroManager()->addLine(MacroManager::Gui,name.c_str());
+        nameApp += "App.setActiveDocument(\"";
+        nameApp += pcDocument->getDocument()->getName(); 
+        nameApp +=  "\")\n";
+        nameApp += "App.ActiveDocument=App.getDocument(\"";
+        nameApp += pcDocument->getDocument()->getName(); 
+        nameApp +=  "\")";
+        macroManager()->addLine(MacroManager::Cmt,nameApp.c_str());
+        nameGui += "Gui.ActiveDocument=Gui.getDocument(\"";
+        nameGui += pcDocument->getDocument()->getName(); 
+        nameGui +=  "\")";
+        macroManager()->addLine(MacroManager::Cmt,nameGui.c_str());
     }
     else {
-        name += "App.setActiveDocument(\"\")\n";
-        name += "App.ActiveDocument=None\n";
-        name += "Gui.ActiveDocument=None";
-        macroManager()->addLine(MacroManager::Gui,name.c_str());
+        nameApp += "App.setActiveDocument(\"\")\n";
+        nameApp += "App.ActiveDocument=None";
+        macroManager()->addLine(MacroManager::Cmt,nameApp.c_str());
+        nameGui += "Gui.ActiveDocument=None";
+        macroManager()->addLine(MacroManager::Cmt,nameGui.c_str());
     }
 
     // Sets the currently active document
     try {
-        Base::Interpreter().runString(name.c_str());
+        Base::Interpreter().runString(nameApp.c_str());
+        Base::Interpreter().runString(nameGui.c_str());
     }
     catch (const Base::Exception& e) {
         Base::Console().Warning(e.what());
@@ -791,19 +815,19 @@ Gui::Document* Application::getDocument(const App::Document* pDoc) const
         return 0;
 }
 
-void Application::showViewProvider(App::DocumentObject* obj)
+void Application::showViewProvider(const App::DocumentObject* obj)
 {
     ViewProvider* vp = getViewProvider(obj);
     if (vp) vp->show();
 }
 
-void Application::hideViewProvider(App::DocumentObject* obj)
+void Application::hideViewProvider(const App::DocumentObject* obj)
 {
     ViewProvider* vp = getViewProvider(obj);
     if (vp) vp->hide();
 }
 
-Gui::ViewProvider* Application::getViewProvider(App::DocumentObject* obj) const
+Gui::ViewProvider* Application::getViewProvider(const App::DocumentObject* obj) const
 {
     App::Document* doc = obj->getDocument();
     if (doc) {
@@ -1267,7 +1291,7 @@ void Application::runCommand(bool bForce, const char* sCmd,...)
     va_end(namelessVars);
 
     if (bForce)
-        d->macroMngr->addLine(MacroManager::Base,format);
+        d->macroMngr->addLine(MacroManager::App,format);
     else
         d->macroMngr->addLine(MacroManager::Gui,format);
 
@@ -1288,7 +1312,7 @@ bool Application::runPythonCode(const char* cmd, bool gui, bool pyexc)
     if (gui)
         d->macroMngr->addLine(MacroManager::Gui,cmd);
     else
-        d->macroMngr->addLine(MacroManager::Base,cmd);
+        d->macroMngr->addLine(MacroManager::App,cmd);
 
     try {
         Base::Interpreter().runString(cmd);
@@ -1403,7 +1427,6 @@ static void init_resources()
 void Application::initApplication(void)
 {
     try {
-        Base::Interpreter().replaceStdOutput();
         initTypes();
         new Base::ScriptProducer( "FreeCADGuiInit", FreeCADGuiInit );
         init_resources();
@@ -1440,6 +1463,10 @@ void Application::initTypes(void)
     Gui::ViewProviderMeasureDistance            ::init();
     Gui::ViewProviderPythonFeature              ::init();
     Gui::ViewProviderPythonGeometry             ::init();
+    Gui::ViewProviderPlacement                  ::init();
+    Gui::ViewProviderPlane                      ::init();
+    Gui::ViewProviderMaterialObject             ::init();
+    Gui::ViewProviderMaterialObjectPython       ::init();
 
     // Workbench
     Gui::Workbench                              ::init();
@@ -1687,12 +1714,29 @@ void Application::runApplication(void)
                               SetASCII("AutoloadModule", start.c_str());
     }
 
+    // Call this before showing the main window because otherwise:
+    // 1. it shows a white window for a few seconds which doesn't look nice
+    // 2. the layout of the toolbars is completely broken
     app.activateWorkbench(start.c_str());
 
     // show the main window
     if (!hidden) {
         Base::Console().Log("Init: Showing main window\n");
         mw.loadWindowSettings();
+    }
+
+    hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/MainWindow");
+    QMdiArea* mdi = mw.findChild<QMdiArea*>();
+    mdi->setProperty("showImage", hGrp->GetBool("TiledBackground", false));
+
+    std::string style = hGrp->GetASCII("StyleSheet");
+    if (!style.empty()) {
+        QFile f(QLatin1String(style.c_str()));
+        if (f.open(QFile::ReadOnly)) {
+            mdi->setBackground(QBrush(Qt::NoBrush));
+            QTextStream str(&f);
+            qApp->setStyleSheet(str.readAll());
+        }
     }
 
     //initialize spaceball.
@@ -1702,6 +1746,7 @@ void Application::runApplication(void)
     SoDebugError::setHandlerCallback( messageHandlerCoin, 0 );
     SoQt::setFatalErrorHandler( messageHandlerSoQt, 0 );
 #endif
+
 
     Instance->d->startingUp = false;
 
@@ -1723,9 +1768,24 @@ void Application::runApplication(void)
     Base::Console().Log("Init: Entering event loop\n");
 
     try {
+        std::stringstream s;
+        s << Base::FileInfo::getTempPath() << App::GetApplication().getExecutableName()
+          << "_" << QCoreApplication::applicationPid() << ".lock";
+        // open a lock file with the PID
+        Base::FileInfo fi(s.str());
+        Base::ofstream lock(fi);
+        boost::interprocess::file_lock flock(s.str().c_str());
+        flock.lock();
+
         int ret = mainApp.exec();
         if (ret == systemExit)
             throw Base::SystemExitException();
+
+        // close the lock file, in case of a crash we can see the existing lock file
+        // on the next restart and try to repair the documents, if needed.
+        flock.unlock();
+        lock.close();
+        fi.deleteFile();
     }
     catch (const Base::SystemExitException&) {
         Base::Console().Message("System exit\n");
@@ -1739,4 +1799,67 @@ void Application::runApplication(void)
     }
 
     Base::Console().Log("Finish: Event loop left\n");
+}
+
+void Application::checkForPreviousCrashes()
+{
+    QDir tmp = QDir::temp();
+    tmp.setNameFilters(QStringList() << QString::fromAscii("*.lock"));
+    tmp.setFilter(QDir::Files);
+
+    QList<QFileInfo> restoreDocFiles;
+    QString exeName = QString::fromAscii(App::GetApplication().getExecutableName());
+    QList<QFileInfo> locks = tmp.entryInfoList();
+    for (QList<QFileInfo>::iterator it = locks.begin(); it != locks.end(); ++it) {
+        QString bn = it->baseName();
+        // ignore the lock file for this instance
+        QString pid = QString::number(QCoreApplication::applicationPid());
+        if (bn.startsWith(exeName) && bn.indexOf(pid) < 0) {
+            QString fn = it->absoluteFilePath();
+            boost::interprocess::file_lock flock((const char*)fn.toLocal8Bit());
+            if (flock.try_lock()) {
+                // OK, this file is a leftover from a previous crash
+                QString crashed_pid = bn.mid(exeName.length()+1);
+                // search for transient directories with this PID
+                QString filter;
+                QTextStream str(&filter);
+                str << exeName << "_Doc_*_" << crashed_pid;
+                tmp.setNameFilters(QStringList() << filter);
+                tmp.setFilter(QDir::Dirs);
+                QList<QFileInfo> dirs = tmp.entryInfoList();
+                if (dirs.isEmpty()) {
+                    // delete the lock file immediately if not transient directories are related
+                    tmp.remove(fn);
+                }
+                else {
+                    int countDeletedDocs = 0;
+                    for (QList<QFileInfo>::iterator it = dirs.begin(); it != dirs.end(); ++it) {
+                        QDir doc_dir(it->absoluteFilePath());
+                        doc_dir.setFilter(QDir::NoDotAndDotDot|QDir::AllEntries);
+                        uint entries = doc_dir.entryList().count();
+                        if (entries == 0) {
+                            // in this case we can delete the transient directory because
+                            // we cannot do anything
+                            if (tmp.rmdir(it->filePath()))
+                                countDeletedDocs++;
+                        }
+                        else {
+                            // store the transient directory in case it's not empty
+                            restoreDocFiles << *it;
+                        }
+                    }
+
+                    // all directories corresponding to the lock file have been deleted
+                    // so delete the lock file, too
+                    if (countDeletedDocs == dirs.size()) {
+                        tmp.remove(fn);
+                    }
+                }
+            }
+        }
+    }
+
+    if (!restoreDocFiles.isEmpty()) {
+        //TODO:
+    }
 }

@@ -141,31 +141,42 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
     // Get Preselection
     int preSelPnt = sketchgui->getPreselectPoint();
     int preSelCrv = sketchgui->getPreselectCurve();
+    int preSelCrs = sketchgui->getPreselectCross();
     int GeoId = Constraint::GeoUndef;
     Sketcher::PointPos PosId = Sketcher::none;
     if (preSelPnt != -1)
         sketchgui->getSketchObject()->getGeoVertexIndex(preSelPnt, GeoId, PosId);
     else if (preSelCrv != -1)
         GeoId = preSelCrv;
+    else if (preSelCrs == 0) { // root point
+        GeoId = -1;
+        PosId = Sketcher::start;
+    }
+    else if (preSelCrs == 1) // x axis
+        GeoId = -1;
+    else if (preSelCrs == 2) // y axis
+        GeoId = -2;
 
-    // Currently only considers objects in current Sketcher
-    AutoConstraint constr;
-    constr.Type = Sketcher::None;
-    constr.GeoId = GeoId;
-    constr.PosId = PosId;
-    if (type == AutoConstraint::VERTEX && preSelPnt != -1)
-        constr.Type = Sketcher::Coincident;
-    else if (type == AutoConstraint::CURVE && preSelPnt != -1)
-        constr.Type = Sketcher::PointOnObject;
-    else if (type == AutoConstraint::VERTEX && preSelCrv != -1)
-        constr.Type = Sketcher::PointOnObject;
-    else if (type == AutoConstraint::CURVE && preSelCrv != -1)
-        constr.Type = Sketcher::Tangent;
+    if (GeoId != Constraint::GeoUndef) {
+        // Currently only considers objects in current Sketcher
+        AutoConstraint constr;
+        constr.Type = Sketcher::None;
+        constr.GeoId = GeoId;
+        constr.PosId = PosId;
+        if (type == AutoConstraint::VERTEX && PosId != Sketcher::none)
+            constr.Type = Sketcher::Coincident;
+        else if (type == AutoConstraint::CURVE && PosId != Sketcher::none)
+            constr.Type = Sketcher::PointOnObject;
+        else if (type == AutoConstraint::VERTEX && PosId == Sketcher::none)
+            constr.Type = Sketcher::PointOnObject;
+        else if (type == AutoConstraint::CURVE && PosId == Sketcher::none)
+            constr.Type = Sketcher::Tangent;
 
-    if (constr.Type != Sketcher::None)
-        suggestedConstraints.push_back(constr);
+        if (constr.Type != Sketcher::None)
+            suggestedConstraints.push_back(constr);
+    }
 
-    if (Dir.Length() < 1)
+    if (Dir.Length() < 1e-8)
         // Direction not set so return;
         return suggestedConstraints.size();
 
@@ -175,6 +186,7 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
     const double angleDev = 2;
     const double angleDevRad = angleDev *  M_PI / 180.;
 
+    AutoConstraint constr;
     constr.Type = Sketcher::None;
     constr.GeoId = Constraint::GeoUndef;
     constr.PosId = Sketcher::none;
@@ -191,10 +203,10 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
  
     // Find if there are tangent constraints (currently arcs and circles)
     // FIXME needs to consider when zooming out?
-    const float tangDeviation = 2.;
+    const double tangDeviation = 2.;
 
     int tangId = Constraint::GeoUndef;
-    float smlTangDist = 1e15f;
+    double smlTangDist = 1e15f;
 
     // Get geometry list
     const std::vector<Part::Geometry *> geomlist = sketchgui->getSketchObject()->getCompleteGeometry();
@@ -209,11 +221,11 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
             Base::Vector3d center = circle->getCenter();
             Base::Vector3d tmpPos(Pos.fX, Pos.fY, 0.f);
 
-            float radius = (float) circle->getRadius();
+            double radius = circle->getRadius();
 
             Base::Vector3d projPnt(0.f, 0.f, 0.f);
             projPnt = projPnt.ProjToLine(center - tmpPos, Base::Vector3d(Dir.fX, Dir.fY));
-            float projDist = projPnt.Length();
+            double projDist = projPnt.Length();
 
             if ( (projDist < radius + tangDeviation ) && (projDist > radius - tangDeviation)) {
                 // Find if nearest
@@ -233,7 +245,7 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
             Base::Vector3d tmpPos(Pos.fX, Pos.fY, 0.f);
 
             projPnt = projPnt.ProjToLine(center - tmpPos, Base::Vector3d(Dir.fX, Dir.fY));
-            float projDist = projPnt.Length();
+            double projDist = projPnt.Length();
 
             if ( projDist < radius + tangDeviation && projDist > radius - tangDeviation) {
                 double startAngle, endAngle;

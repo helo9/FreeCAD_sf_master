@@ -158,20 +158,28 @@ PyObject *PropertyPartShape::getPyObject(void)
         {
         case TopAbs_COMPOUND:
             prop = new TopoShapeCompoundPy(new TopoShape(sh));
+            break;
         case TopAbs_COMPSOLID:
             prop = new TopoShapeCompSolidPy(new TopoShape(sh));
+            break;
         case TopAbs_SOLID:
             prop = new TopoShapeSolidPy(new TopoShape(sh));
+            break;
         case TopAbs_SHELL:
             prop = new TopoShapeShellPy(new TopoShape(sh));
+            break;
         case TopAbs_FACE:
             prop = new TopoShapeFacePy(new TopoShape(sh));
+            break;
         case TopAbs_WIRE:
             prop = new TopoShapeWirePy(new TopoShape(sh));
+            break;
         case TopAbs_EDGE:
             prop = new TopoShapeEdgePy(new TopoShape(sh));
+            break;
         case TopAbs_VERTEX:
             prop = new TopoShapeVertexPy(new TopoShape(sh));
+            break;
         case TopAbs_SHAPE:
         default:
             prop = new TopoShapePy(new TopoShape(sh));
@@ -192,7 +200,7 @@ void PropertyPartShape::setPyObject(PyObject *value)
     else {
         std::string error = std::string("type must be 'Shape', not ");
         error += value->ob_type->tp_name;
-        throw Py::TypeError(error);
+        throw Base::TypeError(error);
     }
 }
 
@@ -454,10 +462,10 @@ PyObject *PropertyFilletEdges::getPyObject(void)
 
 void PropertyFilletEdges::setPyObject(PyObject *value)
 {
-    Py::List list(value);
+    Py::Sequence list(value);
     std::vector<FilletElement> values;
     values.reserve(list.size());
-    for (Py::List::iterator it = list.begin(); it != list.end(); ++it) {
+    for (Py::Sequence::iterator it = list.begin(); it != list.end(); ++it) {
         FilletElement fe;
         Py::Tuple ent(*it);
         fe.edgeid = (int)Py::Int(ent.getItem(0));

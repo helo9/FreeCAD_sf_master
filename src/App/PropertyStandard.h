@@ -32,6 +32,7 @@
 #include <vector>
 #include <boost/filesystem/path.hpp>
 
+#include <Base/Uuid.h>
 #include "Property.h"
 #include "Material.h"
 
@@ -182,6 +183,9 @@ public:
     virtual void Save (Base::Writer &writer) const;
     virtual void Restore(Base::XMLReader &reader);
 
+    virtual Property *Copy(void) const;
+    virtual void Paste(const Property &from);
+
 private:
     bool _CustomEnum;
     const char** _EnumArray;
@@ -297,6 +301,107 @@ private:
     std::vector<long> _lValueList;
 };
 
+/** Integer list properties
+ * 
+ */
+class AppExport PropertyIntegerSet: public Property
+{
+    TYPESYSTEM_HEADER();
+
+public:
+    /**
+
+     * A constructor.
+     * A more elaborate description of the constructor.
+     */
+    PropertyIntegerSet();
+
+    /**
+     * A destructor.
+     * A more elaborate description of the destructor.
+     */
+    ~PropertyIntegerSet();
+
+    /** Sets the property 
+     */
+    void setValue(long);
+    void setValue(void){;}
+  
+    void addValue (long value){_lValueSet.insert(value);}
+    void setValues (const std::set<long>& values);
+
+    const std::set<long> &getValues(void) const{return _lValueSet;}
+
+    virtual PyObject *getPyObject(void);
+    virtual void setPyObject(PyObject *);
+    
+    virtual void Save (Base::Writer &writer) const;
+    virtual void Restore(Base::XMLReader &reader);
+    
+    virtual Property *Copy(void) const;
+    virtual void Paste(const Property &from);
+    virtual unsigned int getMemSize (void) const;
+
+private:
+    std::set<long> _lValueSet;
+};
+
+
+/** implements a key/value list as property 
+ *  The key ought to be ASCII the Value should be treated as UTF8 to be save.
+ */
+class AppExport PropertyMap: public Property
+{
+    TYPESYSTEM_HEADER();
+
+public:
+       
+    /**
+     * A constructor.
+     * A more elaborate description of the constructor.
+     */
+    PropertyMap();
+    
+    /**
+     * A destructor.
+     * A more elaborate description of the destructor.
+     */
+    ~PropertyMap();
+
+    virtual int getSize(void) const;
+    
+    /** Sets the property 
+     */
+    void setValue(void){};
+    void setValue(const std::string& key,const std::string& value);
+    void setValues(const std::map<std::string,std::string>&);
+    
+    /// index operator
+    const std::string& operator[] (const std::string& key) const ;
+    
+    void  set1Value (const std::string& key, const std::string& value){_lValueList.operator[] (key) = value;}
+    
+    const std::map<std::string,std::string> &getValues(void) const{return _lValueList;}
+    
+    //virtual const char* getEditorName(void) const { return "Gui::PropertyEditor::PropertyStringListItem"; }
+    
+    virtual PyObject *getPyObject(void);
+    virtual void setPyObject(PyObject *);
+    
+    virtual void Save (Base::Writer &writer) const;
+    virtual void Restore(Base::XMLReader &reader);
+    
+    virtual Property *Copy(void) const;
+    virtual void Paste(const Property &from);
+    
+    virtual unsigned int getMemSize (void) const;
+    
+
+private:
+    std::map<std::string,std::string> _lValueList;
+};
+
+
 
 /** Float properties
  * This is the father of all properties handling floats.
@@ -322,8 +427,8 @@ public:
     virtual ~PropertyFloat();
 
 
-    void setValue(float lValue);
-    float getValue(void) const;
+    void setValue(double lValue);
+    double getValue(void) const;
     
     virtual const char* getEditorName(void) const { return "Gui::PropertyEditor::PropertyFloatItem"; }
     
@@ -336,10 +441,10 @@ public:
     virtual Property *Copy(void) const;
     virtual void Paste(const Property &from);
     
-    virtual unsigned int getMemSize (void) const{return sizeof(float);}
+    virtual unsigned int getMemSize (void) const{return sizeof(double);}
     
 protected:
-    float _dValue;
+    double _dValue;
 };
 
 /** Constraint float properties
@@ -370,7 +475,7 @@ public:
     //@{
     /// the boundary struct
     struct Constraints {
-        float LowerBound, UpperBound, StepSize;
+        double LowerBound, UpperBound, StepSize;
     };
     /** setting the boundaries
      * This sets the constraint struct. It can be dynamcly 
@@ -417,16 +522,18 @@ public:
 
     /** Sets the property 
      */
-    void setValue(float);
+    void setValue(double);
+
+    void setValue (void){};
     
     /// index operator
-    float operator[] (const int idx) const {return _lValueList.operator[] (idx);} 
+    double operator[] (const int idx) const {return _lValueList.operator[] (idx);} 
     
     
-    void set1Value (const int idx, float value){_lValueList.operator[] (idx) = value;}
-    void setValues (const std::vector<float>& values);
+    void set1Value (const int idx, double value){_lValueList.operator[] (idx) = value;}
+    void setValues (const std::vector<double>& values);
     
-    const std::vector<float> &getValues(void) const{return _lValueList;}
+    const std::vector<double> &getValues(void) const{return _lValueList;}
     
     virtual PyObject *getPyObject(void);
     virtual void setPyObject(PyObject *);
@@ -442,7 +549,7 @@ public:
     virtual unsigned int getMemSize (void) const;
 
 private:
-    std::vector<float> _lValueList;
+    std::vector<double> _lValueList;
 };
 
 
@@ -488,6 +595,50 @@ public:
 private:
     std::string _cValue;
 };
+
+/** UUID properties
+ * This property handles unique identifieers 
+ */
+class AppExport PropertyUUID: public Property
+{
+    TYPESYSTEM_HEADER();
+
+public:
+
+    /**
+     * A constructor.
+     * A more elaborate description of the constructor.
+     */
+    PropertyUUID(void);
+    
+    /**
+     * A destructor.
+     * A more elaborate description of the destructor.
+     */
+    virtual ~PropertyUUID();
+
+
+    void setValue(const Base::Uuid &);
+    void setValue(const char* sString);
+    void setValue(const std::string &sString);
+    const std::string& getValueStr(void) const;
+    const Base::Uuid& getValue(void) const;
+    
+    //virtual const char* getEditorName(void) const { return "Gui::PropertyEditor::PropertyStringItem"; }
+    virtual PyObject *getPyObject(void);
+    virtual void setPyObject(PyObject *);
+    
+    virtual void Save (Base::Writer &writer) const;
+    virtual void Restore(Base::XMLReader &reader);
+
+    virtual Property *Copy(void) const;
+    virtual void Paste(const Property &from);
+    virtual unsigned int getMemSize (void) const;
+
+private:
+    Base::Uuid _uuid;
+};
+
 
 /** Property handling with font names.
  */

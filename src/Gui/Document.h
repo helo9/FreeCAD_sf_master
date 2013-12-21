@@ -33,6 +33,10 @@
 #include <Base/Persistence.h>
 #include <App/Document.h>
 
+#include "Tree.h"
+
+class SoPath;
+
 namespace Base
 {
   class Matrix4D;
@@ -68,7 +72,8 @@ protected:
     void slotChangedObject(const App::DocumentObject&, const App::Property&);
     void slotRenamedObject(const App::DocumentObject&);
     void slotActivatedObject(const App::DocumentObject&);
-    void slotRestoredDocument(const App::Document&);
+    void slotStartRestoreDocument(const App::Document&);
+    void slotFinishRestoreDocument(const App::Document&);
     //@}
 
 public:
@@ -78,18 +83,26 @@ public:
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalNewObject;
     /// signal on deleted Object
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalDeletedObject;
-    /// signal on changed Object, the 2nd argument is the changed property
-    /// of the referenced document object, not of the view provider
+    /** signal on changed Object, the 2nd argument is the changed property
+        of the referenced document object, not of the view provider */
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&,
-                                const App::Property&)> signalChangedObject;
+                                const App::Property&)>                   signalChangedObject;
     /// signal on renamed Object
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalRenamedObject;
     /// signal on activated Object
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalActivatedObject;
-    /// signal on goes in edti mode
+    /// signal on entering in edit mode
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalInEdit;
-   /// signal on leave edit mode
+    /// signal on leaving edit mode
     mutable boost::signal<void (const Gui::ViewProviderDocumentObject&)> signalResetEdit;
+    /// signal on changed Object, the 2nd argument is the highlite mode to use
+    mutable boost::signal<void (const Gui::ViewProviderDocumentObject&,
+                                const Gui::HighlightMode&,
+                                bool)>                                   signalHighlightObject;
+    /// signal on changed Object, the 2nd argument is the highlite mode to use
+    mutable boost::signal<void (const Gui::ViewProviderDocumentObject&,
+                                const Gui::TreeItemMode&)>               signalExpandObject;
+
     //@}
 
     /** @name I/O of the document */
@@ -122,6 +135,7 @@ public:
     //@{
     /// Getter for the active view
     Gui::MDIView* getActiveView(void) const;
+    Gui::MDIView* getViewOfViewProvider(Gui::ViewProvider*) const;
     /// Creat a new view
     void createView(const char* sType); 
     /** send messages to the active view 
@@ -133,7 +147,9 @@ public:
     /// Attach a view (get called by the MDIView constructor)
     void attachView(Gui::BaseView* pcView, bool bPassiv=false);
     /// Detach a view (get called by the MDIView destructor)
-    void detachView(Gui::BaseView* pcView, bool bPassiv=false);
+    void detachView(Gui::BaseView* pcView, bool bPassiv=false); 
+    /// helper for selection
+    ViewProvider* getViewProviderByPathFromTail(SoPath * path) const;
     /// call update on all attached views
     void onUpdate(void);
     /// call relabel to all attached views
@@ -180,6 +196,8 @@ public:
     void commitCommand(void);
     /// Abort the Undo transaction on the document
     void abortCommand(void);
+    /// Check if an Undo transaction is open
+    bool hasPendingCommand(void) const;
     /// Get an Undo string vector with the Undo names
     std::vector<std::string> getUndoVector(void) const;
     /// Get an Redo string vector with the Redo names

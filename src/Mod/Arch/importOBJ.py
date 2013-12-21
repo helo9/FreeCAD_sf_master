@@ -46,7 +46,7 @@ def getIndices(shape,offset):
         vlist.append(" "+str(round(v.X,p))+" "+str(round(v.Y,p))+" "+str(round(v.Z,p)))
     if not shape.Faces:
         for e in shape.Edges:
-            if isinstance(e,Part.Line):
+            if DraftGeomUtils.geomType(e) == "Line":
                 ei = " " + str(findVert(e.Vertexes[0],shape.Vertexes) + offset)
                 ei += " " + str(findVert(e.Vertexes[-1],shape.Vertexes) + offset)
                 elist.append(ei)
@@ -77,7 +77,7 @@ def export(exportList,filename):
     outfile = pythonopen(filename,"wb")
     ver = FreeCAD.Version()
     outfile.write("# FreeCAD v" + ver[0] + "." + ver[1] + " build" + ver[2] + " Arch module\n")
-    outfile.write("# http://free-cad.sf.net\n")
+    outfile.write("# http://www.freecadweb.org\n")
     offset = 1
     for obj in exportList:
         if obj.isDerivedFrom("Part::Feature"):

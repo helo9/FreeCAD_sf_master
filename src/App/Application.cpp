@@ -73,6 +73,8 @@
 #include <Base/Sequencer.h>
 #include <Base/Tools.h>
 #include <Base/UnitsApi.h>
+#include <Base/QuantityPy.h>
+#include <Base/UnitPy.h>
 
 #include "GeoFeature.h"
 #include "FeatureTest.h"
@@ -91,6 +93,9 @@
 #include "VRMLObject.h"
 #include "Annotation.h"
 #include "MeasureDistance.h"
+#include "Placement.h"
+#include "Plane.h"
+#include "MaterialObject.h"
 
 // If you stumble here, run the target "BuildExtractRevision" on Windows systems
 // or the Python script "SubWCRev.py" on Linux based systems which builds
@@ -230,6 +235,9 @@ Application::Application(ParameterManager * /*pcSysParamMngr*/,
     //insert Units module
     PyObject* pUnitsModule = Py_InitModule3("Units", Base::UnitsApi::Methods,
           "The Unit API");
+    Base::Interpreter().addType(&Base::QuantityPy  ::Type,pUnitsModule,"Quantity");
+    Base::Interpreter().addType(&Base::UnitPy      ::Type,pUnitsModule,"Unit");
+
     Py_INCREF(pUnitsModule);
     PyModule_AddObject(pAppModule, "Units", pUnitsModule);
 
@@ -284,6 +292,8 @@ Document* Application::newDocument(const char * Name, const char * UserName)
     _pActiveDoc->signalChangedObject.connect(boost::bind(&App::Application::slotChangedObject, this, _1, _2));
     _pActiveDoc->signalRenamedObject.connect(boost::bind(&App::Application::slotRenamedObject, this, _1));
     _pActiveDoc->signalActivatedObject.connect(boost::bind(&App::Application::slotActivatedObject, this, _1));
+    _pActiveDoc->signalUndo.connect(boost::bind(&App::Application::slotUndoDocument, this, _1));
+    _pActiveDoc->signalRedo.connect(boost::bind(&App::Application::slotRedoDocument, this, _1));
 
     // make sure that the active document is set in case no GUI is up
     {
@@ -827,6 +837,15 @@ void Application::slotActivatedObject(const App::DocumentObject&O)
     this->signalActivatedObject(O);
 }
 
+void Application::slotUndoDocument(const App::Document& d)
+{
+    this->signalUndoDocument(d);
+}
+
+void Application::slotRedoDocument(const App::Document& d)
+{
+    this->signalRedoDocument(d);
+}
 
 //**************************************************************************
 // Init, Destruct and singleton
@@ -941,10 +960,12 @@ void Application::init(int argc, char ** argv)
 #endif
         // if an unexpected crash occurs we can install a handler function to
         // write some additional information
+#ifdef _MSC_VER // Microsoft compiler
         std::signal(SIGSEGV,segmentation_fault_handler);
         std::signal(SIGABRT,segmentation_fault_handler);
         std::set_terminate(unhandled_exception_handler);
         std::set_unexpected(unexpection_error_handler);
+#endif
 
         initTypes();
 
@@ -992,7 +1013,10 @@ void Application::initTypes(void)
     App ::PropertyPercent           ::init();
     App ::PropertyEnumeration       ::init();
     App ::PropertyIntegerList       ::init();
+    App ::PropertyIntegerSet        ::init();
+    App ::PropertyMap               ::init();
     App ::PropertyString            ::init();
+    App ::PropertyUUID              ::init();
     App ::PropertyFont              ::init();
     App ::PropertyStringList        ::init();
     App ::PropertyLink              ::init();
@@ -1029,6 +1053,10 @@ void Application::initTypes(void)
     App ::Annotation                ::init();
     App ::AnnotationLabel           ::init();
     App ::MeasureDistance           ::init();
+    App ::MaterialObject            ::init();
+    App ::MaterialObjectPython      ::init();
+    App ::Placement                 ::init();
+    App ::Plane                     ::init();
 }
 
 void Application::initConfig(int argc, char ** argv)
@@ -1105,9 +1133,6 @@ void Application::initConfig(int argc, char ** argv)
 
     LoadParameters();
 
-    // set the default units
-    UnitsApi::setDefaults();
-
     // capture python variables
     SaveEnv("PYTHONPATH");
     SaveEnv("PYTHONHOME");
@@ -1152,9 +1177,9 @@ void Application::initApplication(void)
     Application::_pcSingleton = new Application(0,0,mConfig);
 
     // set up Unit system default
-    //ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath
-    //   ("User parameter:BaseApp/Preferences/Units");
-    //UnitsApi::setSchema((UnitSystem)hGrp->GetInt("UserSchema",0));
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath
+       ("User parameter:BaseApp/Preferences/Units");
+    UnitsApi::setSchema((UnitSystem)hGrp->GetInt("UserSchema",0));
 
     // starting the init script
     Interpreter().runString(Base::ScriptFactory().ProduceScript("FreeCADInit"));
@@ -1191,10 +1216,13 @@ void Application::processCmdLineFiles(void)
                 Base::Interpreter().runFile(File.filePath().c_str(), true);
             }
             else if (File.hasExtension("py")) {
-                //FIXME: Does this make any sense? I think we should do the ame as for
-                // fcmacro or fcscript.
-                //Base::Interpreter().loadModule(File.fileNamePure().c_str());
-                Base::Interpreter().runFile(File.filePath().c_str(), true);
+                try {
+                    Base::Interpreter().loadModule(File.fileNamePure().c_str());
+                }
+                catch(const PyException&) {
+                    // if module load not work, just try run the script (run in __main__)
+                    Base::Interpreter().runFile(File.filePath().c_str(),true);
+                }
             }
             else {
                 std::vector<std::string> mods = App::GetApplication().getImportModules(Ext.c_str());
@@ -1337,7 +1365,7 @@ void Application::LoadParameters(void)
 
 #if defined(_MSC_VER)
 // fix weird error while linking boost (all versions of VC)
-// VS2010: https://sourceforge.net/apps/phpbb/free-cad/viewtopic.php?f=4&t=1886&p=12553&hilit=boost%3A%3Afilesystem%3A%3Aget#p12553
+// VS2010: http://forum.freecadweb.org/viewtopic.php?f=4&t=1886&p=12553&hilit=boost%3A%3Afilesystem%3A%3Aget#p12553
 namespace boost { namespace program_options { std::string arg="arg"; } }
 #if (defined (BOOST_VERSION) && (BOOST_VERSION >= 104100))
 namespace boost { namespace program_options {
@@ -1359,6 +1387,10 @@ namespace boost { namespace filesystem {
 
 pair<string, string> customSyntax(const string& s)
 {
+#if defined(FC_OS_MACOSX)
+    if (s.find("-psn_") == 0)
+        return make_pair(string("psn"), s.substr(5));
+#endif
     if (s.find("-display") == 0)
         return make_pair(string("display"), string("null"));
     else if (s.find("-style") == 0)
@@ -1467,6 +1499,9 @@ void Application::ParseOptions(int ac, char ** av)
     ("visual",     boost::program_options::value< string >(), "set the X-Window to color scema")
     ("ncols",      boost::program_options::value< int    >(), "set the X-Window to color scema")
     ("cmap",                                                  "set the X-Window to color scema")
+#if defined(FC_OS_MACOSX)
+    ("psn",        boost::program_options::value< string >(), "process serial number")
+#endif
     ;
 
     // Ignored options, will be savely ignored. Mostly uses by underlaying libs.
@@ -1535,7 +1570,7 @@ void Application::ParseOptions(int ac, char ** av)
     if (vm.count("help")) {
         std::stringstream str;
         str << mConfig["ExeName"] << endl << endl;
-        str << "For detailed descripton see http://free-cad.sf.net" << endl<<endl;
+        str << "For detailed descripton see http://www.freecadweb.org" << endl<<endl;
         str << "Usage: " << mConfig["ExeName"] << " [options] File1 File2 ..." << endl << endl;
         str << visible << endl;
         throw Base::ProgramInformation(str.str());

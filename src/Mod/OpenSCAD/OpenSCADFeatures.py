@@ -1,6 +1,6 @@
 #***************************************************************************
 #*                                                                         *
-#*   Copyright (c) 2012 Sebastian Hoogen <github@sebastianhoogen.de>       * 
+#*   Copyright (c) 2012 Sebastian Hoogen <github@sebastianhoogen.de>       *
 #*                                                                         *
 #*   This program is free software; you can redistribute it and/or modify  *
 #*   it under the terms of the GNU Lesser General Public License (LGPL)    *
@@ -22,7 +22,7 @@
 
 __title__="FreeCAD OpenSCAD Workbench - Parametric Features"
 __author__ = "Sebastian Hoogen"
-__url__ = ["http://free-cad.sourceforge.net"]
+__url__ = ["http://www.freecadweb.org"]
 
 '''
 This Script includes python Features to represent OpenSCAD Operations
@@ -75,6 +75,9 @@ class ViewProviderTree:
             objs.extend(self.Object.Objects)
         if hasattr(self.Object,"Components"):
             objs.extend(self.Object.Components)
+        if hasattr(self.Object,"Children"):
+            objs.extend(self.Object.Children)
+
         return objs
    
     def getIcon(self):
@@ -215,6 +218,19 @@ static char * openscadlogo_xpm[] = {
 "4444444444444444"};
 """
 
+class OpenSCADPlaceholder:
+    def __init__(self,obj,children=None,arguments=None):
+        obj.addProperty("App::PropertyLinkList",'Children','OpenSCAD',"Base Objects")
+        obj.addProperty("App::PropertyString",'Arguments','OpenSCAD',"Arguments")
+        obj.Proxy = self
+        if children:
+            obj.Children = children
+        if arguments:
+            obj.Arguments = arguments
+             
+    def execute(self,fp):
+        import Part
+        fp.Shape = Part.Compound([]) #empty Shape
 
 class MatrixTransform:
     def __init__(self, obj,matrix=None,child=None):
@@ -274,10 +290,7 @@ class RefineShape:
     def execute(self, fp):
         if fp.Base and fp.Base.Shape.isValid():
             sh=fp.Base.Shape.removeSplitter()
-            if sh.Placement.isNull():
-                fp.Shape=sh
-            else:
-                fp.Shape=sh.transformGeometry(sh.Placement.toMatrix())
+            fp.Shape=sh
 
 class GetWire:
     '''return the first wire from a given shape'''
@@ -294,8 +307,8 @@ class GetWire:
     def execute(self, fp):
         if fp.Base:
             #fp.Shape=fp.Base.Shape.Wires[0]
-            fp.Shape=fp.Base.Shape.Wires[0].transformGeometry(\
-                    fp.Base.Shape.Placement.toMatrix())
+            fp.Shape=Part.Wire(fp.Base.Shape.Wires[0]) # works with 0.13 stable
+            #sh = fp.Base.Shape.Wires[0].copy; sh.transformSahpe(fp.Base.Shape.Placement.toMatrix()); fp.Shape = sh #untested
 
 class Frustum:
     def __init__(self, obj,r1=1,r2=2,n=3,h=4):
@@ -431,3 +444,35 @@ class OffsetShape:
     def createGeometry(self,fp):
         if fp.Base and fp.Offset:
             fp.Shape=fp.Base.Shape.makeOffsetShape(self.Offset,1e-6)
+
+def makeSurfaceVolume(filename):
+    import FreeCAD,Part
+    f1=open(filename)
+    coords=[]
+    miny=1
+    for line in f1.readlines():
+        sline=line.strip()
+        if sline and not sline.startswith('#'):
+            ycoord=len(coords)
+            lcoords=[]
+            for xcoord, num in enumerate(sline.split()):
+                fnum=float(num)
+                lcoords.append(FreeCAD.Vector(float(xcoord),float(ycoord),fnum))
+                miny=min(fnum,miny)
+            coords.append(lcoords)
+    s=Part.BSplineSurface()
+    s.interpolate(coords)
+    plane=Part.makePlane(len(coords[0])-1,len(coords)-1,FreeCAD.Vector(0,0,miny-1))
+    l1=Part.makeLine(plane.Vertexes[0].Point,s.value(0,0))
+    l2=Part.makeLine(plane.Vertexes[1].Point,s.value(1,0))
+    l3=Part.makeLine(plane.Vertexes[2].Point,s.value(0,1))
+    l4=Part.makeLine(plane.Vertexes[3].Point,s.value(1,1))
+    f0=plane.Faces[0]
+    f0.reverse()
+    f1=Part.Face(Part.Wire([plane.Edges[0],l1.Edges[0],s.vIso(0).toShape(),l2.Edges[0]]))
+    f2=Part.Face(Part.Wire([plane.Edges[1],l3.Edges[0],s.uIso(0).toShape(),l1.Edges[0]]))
+    f3=Part.Face(Part.Wire([plane.Edges[2],l4.Edges[0],s.vIso(1).toShape(),l3.Edges[0]]))
+    f4=Part.Face(Part.Wire([plane.Edges[3],l2.Edges[0],s.uIso(1).toShape(),l4.Edges[0]]))
+    f5=s.toShape().Faces[0]
+    solid=Part.Solid(Part.Shell([f0,f1,f2,f3,f4,f5]))
+    return solid,(len(coords[0])-1)/2.0,(len(choords)-1)/2.0

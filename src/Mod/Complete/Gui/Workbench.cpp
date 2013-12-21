@@ -140,9 +140,9 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     Gui::MenuItem* stdviews = new Gui::MenuItem;
     stdviews->setCommand("Standard views");
     *stdviews << "Std_ViewFitAll" << "Std_ViewFitSelection" << "Std_ViewAxo"
-              << "Separator" << "Std_ViewFront" << "Std_ViewRight"
-              << "Std_ViewTop" << "Separator" << "Std_ViewRear"
-              << "Std_ViewLeft" << "Std_ViewBottom";
+              << "Separator" << "Std_ViewFront" << "Std_ViewTop"
+              << "Std_ViewRight" << "Separator" << "Std_ViewRear"
+              << "Std_ViewBottom" << "Std_ViewLeft";
 
     // stereo
     Gui::MenuItem* view3d = new Gui::MenuItem;
@@ -209,7 +209,6 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     mesh->setCommand("&Meshes");
     *mesh << "Mesh_Import"
           << "Mesh_Export"
-          << "Mesh_FromGeometry"
           << "MeshPart_Mesher"
           << "Separator"
           << analyze
@@ -233,6 +232,53 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "Mesh_Segmentation"
           << "Mesh_VertexCurvature";
 
+    // Sketch **************************************************************************************************
+
+    Gui::MenuItem* sketch = new Gui::MenuItem(menuBar);
+    sketch->setCommand("S&ketch");
+
+    Gui::MenuItem* geom = new Gui::MenuItem();
+    geom->setCommand("Sketcher geometries");
+    *geom << "Sketcher_CreatePoint"
+          << "Sketcher_CreateArc"
+          << "Sketcher_CreateCircle"
+          << "Sketcher_CreateLine"
+          << "Sketcher_CreatePolyline"
+          << "Sketcher_CreateRectangle"
+          << "Separator"
+          << "Sketcher_CreateFillet"
+          << "Sketcher_Trimming"
+          << "Sketcher_External"
+          << "Sketcher_ToggleConstruction";
+
+    Gui::MenuItem* cons = new Gui::MenuItem();
+    cons->setCommand("Sketcher constraints");
+    *cons << "Sketcher_ConstrainCoincident"
+          << "Sketcher_ConstrainPointOnObject"
+          << "Sketcher_ConstrainVertical"
+          << "Sketcher_ConstrainHorizontal"
+          << "Sketcher_ConstrainParallel"
+          << "Sketcher_ConstrainPerpendicular"
+          << "Sketcher_ConstrainTangent"
+          << "Sketcher_ConstrainEqual"
+          << "Sketcher_ConstrainSymmetric"
+          << "Separator"
+          << "Sketcher_ConstrainLock"
+          << "Sketcher_ConstrainDistanceX"
+          << "Sketcher_ConstrainDistanceY"
+          << "Sketcher_ConstrainDistance"
+          << "Sketcher_ConstrainRadius"
+          << "Sketcher_ConstrainAngle";
+
+    *sketch
+        << "Sketcher_NewSketch"
+        << "Sketcher_LeaveSketch"
+        << "Sketcher_ViewSketch"
+        << "Sketcher_MapSketch"
+        << geom
+        << cons
+    ;
+
     // Part ****************************************************************************************************
 
     Gui::MenuItem* part = new Gui::MenuItem(menuBar);
@@ -251,44 +297,16 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     Gui::MenuItem* PartDesign = new Gui::MenuItem();
     PartDesign->setCommand("Part design");
 
-    *PartDesign   << "Sketcher_NewSketch"
-                  << "Sketcher_LeaveSketch"
-                  << "Sketcher_ViewSketch"
-                  << "Sketcher_MapSketch"
-                  << "Separator"
-                  << "Sketcher_CreatePoint"
-                  << "Sketcher_CreateArc"
-                  << "Sketcher_CreateCircle"
-                  << "Sketcher_CreateLine"
-                  << "Sketcher_CreatePolyline"
-                  << "Sketcher_CreateRectangle"
-                  << "Sketcher_CreateFillet"
-                  << "Sketcher_Trimming"
-                  << "Sketcher_External"
-                  << "Sketcher_ToggleConstruction"
-                  << "Separator"
-                  << "Sketcher_ConstrainLock"
-                  << "Sketcher_ConstrainCoincident"
-                  << "Sketcher_ConstrainPointOnObject"
-                  << "Sketcher_ConstrainDistanceX"
-                  << "Sketcher_ConstrainDistanceY"
-                  << "Sketcher_ConstrainVertical"
-                  << "Sketcher_ConstrainHorizontal"
-                  << "Sketcher_ConstrainDistance"
-                  << "Sketcher_ConstrainRadius"
-                  << "Sketcher_ConstrainParallel"
-                  << "Sketcher_ConstrainPerpendicular"
-                  << "Sketcher_ConstrainAngle"
-                  << "Sketcher_ConstrainTangent"
-                  << "Sketcher_ConstrainEqual"
-                  << "Sketcher_ConstrainSymmetric"
-                  << "Separator"
-                  << "PartDesign_Pad"
+    *PartDesign   << "PartDesign_Pad"
                   << "PartDesign_Pocket"
                   << "PartDesign_Revolution"
+                  << "PartDesign_Groove"
                   << "PartDesign_Fillet"
-                  << "PartDesign_Chamfer";
-
+                  << "PartDesign_Chamfer"
+                  << "PartDesign_Mirrored"
+                  << "PartDesign_LinearPattern"
+                  << "PartDesign_PolarPattern"
+                  << "PartDesign_MultiTransform";
 
     *part << para
           << PartDesign
@@ -451,8 +469,8 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     Gui::ToolBarItem* view = new Gui::ToolBarItem( root );
     view->setCommand("View");
     *view << "Std_ViewFitAll" << "Separator" << "Std_ViewAxo" << "Separator" << "Std_ViewFront"
-          << "Std_ViewRight" << "Std_ViewTop" << "Separator" << "Std_ViewRear" << "Std_ViewLeft"
-          << "Std_ViewBottom" << "Separator" << "Std_MeasureDistance";
+          << "Std_ViewTop" << "Std_ViewRight" << "Separator" << "Std_ViewRear" << "Std_ViewBottom"
+          << "Std_ViewLeft" << "Separator" << "Std_MeasureDistance";
 
     // Part Design
     Gui::ToolBarItem* part_design = new Gui::ToolBarItem( root );
@@ -478,46 +496,58 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
         << "Part_Chamfer"
     ;
 
-    // Sketch based
-    Gui::ToolBarItem* sketch_based = new Gui::ToolBarItem( root );
-    sketch_based->setCommand("Sketch based");
-    *sketch_based
-              << "Sketcher_NewSketch"
-              << "Sketcher_LeaveSketch"
-              << "Separator"
-              << "Sketcher_CreatePoint"
-              << "Sketcher_CreateArc"
-              << "Sketcher_CreateCircle"
-              << "Sketcher_CreateLine"
-              << "Sketcher_CreatePolyline"
-              << "Sketcher_CreateRectangle"
-              << "Sketcher_CreateFillet"
-              << "Sketcher_Trimming"
-              << "Sketcher_External"
-              << "Sketcher_ToggleConstruction"
-              << "Separator"
-              << "Sketcher_ConstrainLock"
-              << "Sketcher_ConstrainCoincident"
-              << "Sketcher_ConstrainPointOnObject"
-              << "Sketcher_ConstrainDistanceX"
-              << "Sketcher_ConstrainDistanceY"
-              << "Sketcher_ConstrainVertical"
-              << "Sketcher_ConstrainHorizontal"
-              << "Sketcher_ConstrainDistance"
-              << "Sketcher_ConstrainRadius"
-              << "Sketcher_ConstrainParallel"
-              << "Sketcher_ConstrainPerpendicular"
-              << "Sketcher_ConstrainAngle"
-              << "Sketcher_ConstrainTangent"
-              << "Sketcher_ConstrainEqual"
-              << "Sketcher_ConstrainSymmetric"
-              << "Separator"
+    Gui::ToolBarItem* geom = new Gui::ToolBarItem(root);
+    geom->setCommand("Sketcher geometries");
+    *geom << "Sketcher_NewSketch"
+          << "Sketcher_LeaveSketch"
+          << "Separator"
+          << "Sketcher_CreatePoint"
+          << "Sketcher_CreateArc"
+          << "Sketcher_CreateCircle"
+          << "Sketcher_CreateLine"
+          << "Sketcher_CreatePolyline"
+          << "Sketcher_CreateRectangle"
+          << "Separator"
+          << "Sketcher_CreateFillet"
+          << "Sketcher_Trimming"
+          << "Sketcher_External"
+          << "Sketcher_ToggleConstruction"
+          /*<< "Sketcher_CreateText"*/
+          /*<< "Sketcher_CreateDraftLine"*/;
+
+    Gui::ToolBarItem* cons = new Gui::ToolBarItem(root);
+    cons->setCommand("Sketcher constraints");
+    *cons << "Sketcher_ConstrainCoincident"
+          << "Sketcher_ConstrainPointOnObject"
+          << "Sketcher_ConstrainVertical"
+          << "Sketcher_ConstrainHorizontal"
+          << "Sketcher_ConstrainParallel"
+          << "Sketcher_ConstrainPerpendicular"
+          << "Sketcher_ConstrainTangent"
+          << "Sketcher_ConstrainEqual"
+          << "Sketcher_ConstrainSymmetric"
+          << "Separator"
+          << "Sketcher_ConstrainLock"
+          << "Sketcher_ConstrainDistanceX"
+          << "Sketcher_ConstrainDistanceY"
+          << "Sketcher_ConstrainDistance"
+          << "Sketcher_ConstrainRadius"
+          << "Sketcher_ConstrainAngle";
+
+    // Part Design
+    Gui::ToolBarItem* partdesign = new Gui::ToolBarItem(root);
+    partdesign->setCommand("Part Design");
+    *partdesign
               << "PartDesign_Pad"
               << "PartDesign_Pocket"
               << "PartDesign_Revolution"
+              << "PartDesign_Groove"
               << "PartDesign_Fillet"
-              << "PartDesign_Chamfer";
-
+              << "PartDesign_Chamfer"
+              << "PartDesign_Mirrored"
+              << "PartDesign_LinearPattern"
+              << "PartDesign_PolarPattern"
+              << "PartDesign_MultiTransform";
 
     // Drawing
     Gui::ToolBarItem* drawing = new Gui::ToolBarItem( root );

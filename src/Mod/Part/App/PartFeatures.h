@@ -25,6 +25,7 @@
 #define PART_FEATURES_H
 
 #include <App/PropertyStandard.h>
+#include <App/PropertyUnits.h>
 #include <Mod/Part/App/PartFeature.h>
 
 namespace Part
@@ -37,6 +38,7 @@ class RuledSurface : public Part::Feature
 public:
     RuledSurface();
 
+    App::PropertyEnumeration Orientation;
     App::PropertyLinkSub Curve1;
     App::PropertyLinkSub Curve2;
 
@@ -45,10 +47,16 @@ public:
     /// recalculate the feature
     App::DocumentObjectExecReturn *execute(void);
     short mustExecute() const;
+    const char* getViewProviderName(void) const {
+        return "PartGui::ViewProviderRuledSurface";
+    }
     //@}
 
 protected:
     void onChanged (const App::Property* prop);
+
+private:
+    static const char* OrientationEnums[];
 };
 
 class Loft : public Part::Feature
@@ -67,6 +75,9 @@ public:
     /// recalculate the feature
     App::DocumentObjectExecReturn *execute(void);
     short mustExecute() const;
+    const char* getViewProviderName(void) const {
+        return "PartGui::ViewProviderLoft";
+    }
     //@}
 
 protected:
@@ -91,6 +102,9 @@ public:
     /// recalculate the feature
     App::DocumentObjectExecReturn *execute(void);
     short mustExecute() const;
+    const char* getViewProviderName(void) const {
+        return "PartGui::ViewProviderSweep";
+    }
     //@}
 
 protected:
@@ -98,6 +112,65 @@ protected:
 
 private:
     static const char* TransitionEnums[];
+};
+
+class Offset : public Part::Feature
+{
+    PROPERTY_HEADER(Part::Offset);
+
+public:
+    Offset();
+
+    App::PropertyLink  Source;
+    App::PropertyFloat Value;
+    App::PropertyEnumeration Mode;
+    App::PropertyEnumeration Join;
+    App::PropertyBool Intersection;
+    App::PropertyBool SelfIntersection;
+    App::PropertyBool Fill;
+
+    /** @name methods override feature */
+    //@{
+    /// recalculate the feature
+    App::DocumentObjectExecReturn *execute(void);
+    short mustExecute() const;
+    const char* getViewProviderName(void) const {
+        return "PartGui::ViewProviderOffset";
+    }
+    //@}
+
+private:
+    static const char* ModeEnums[];
+    static const char* JoinEnums[];
+};
+
+class Thickness : public Part::Feature
+{
+    PROPERTY_HEADER(Part::Thickness);
+
+public:
+    Thickness();
+
+    App::PropertyLinkSub Faces;
+    App::PropertyFloat Value;
+    App::PropertyEnumeration Mode;
+    App::PropertyEnumeration Join;
+    App::PropertyBool Intersection;
+    App::PropertyBool SelfIntersection;
+
+    /** @name methods override feature */
+    //@{
+    /// recalculate the feature
+    App::DocumentObjectExecReturn *execute(void);
+    short mustExecute() const;
+    const char* getViewProviderName(void) const {
+        return "PartGui::ViewProviderThickness";
+    }
+    //@}
+
+private:
+    static const char* ModeEnums[];
+    static const char* JoinEnums[];
 };
 
 } //namespace Part

@@ -69,6 +69,50 @@ PyObject*  DocumentPy::save(PyObject * args)
     Py_Return;
 }
 
+PyObject*  DocumentPy::saveAs(PyObject * args)
+{
+    char* fn;
+    if (!PyArg_ParseTuple(args, "s", &fn))     // convert args: Python->C 
+        return NULL;                    // NULL triggers exception 
+    if (!getDocumentPtr()->saveAs(fn)) {
+        PyErr_Format(PyExc_ValueError, "Object attribute 'FileName' is not set");
+        return NULL;
+    }
+
+    Base::FileInfo fi(fn);
+    if (!fi.isReadable()) {
+        PyErr_Format(PyExc_IOError, "No such file or directory: '%s'", fn);
+        return NULL;
+    }
+
+    Py_Return;
+}
+
+PyObject*  DocumentPy::load(PyObject * args)
+{
+    char* filename=0;
+    if (!PyArg_ParseTuple(args, "s", &filename))
+        return NULL;
+    if (!filename || *filename == '\0') {
+        PyErr_Format(PyExc_ValueError, "Path is empty");
+        return NULL;
+    }
+
+    getDocumentPtr()->FileName.setValue(filename);
+    Base::FileInfo fi(filename);
+    if (!fi.isReadable()) {
+        PyErr_Format(PyExc_IOError, "No such file or directory: '%s'", filename);
+        return NULL;
+    }
+    try {
+        getDocumentPtr()->restore();
+    } catch (...) {
+        PyErr_Format(PyExc_IOError, "Reading from file '%s' failed", filename);
+        return NULL;
+    }
+    Py_Return;
+}
+
 PyObject*  DocumentPy::restore(PyObject * args)
 {
     if (!PyArg_ParseTuple(args, ""))     // convert args: Python->C 
@@ -147,7 +191,7 @@ PyObject*  DocumentPy::addObject(PyObject *args)
                     pyvp.setAttr("__vobject__", pyftr.getAttr("ViewObject"));
                 }
                 pyftr.getAttr("ViewObject").setAttr("Proxy", pyvp);
-                return Py::new_reference_to(Py::None());
+                return Py::new_reference_to(pyftr);
             }
             catch (Py::Exception& e) {
                 e.clear();
@@ -182,12 +226,14 @@ PyObject*  DocumentPy::removeObject(PyObject *args)
 
 PyObject*  DocumentPy::copyObject(PyObject *args)
 {
-    PyObject *obj, *rec=0, *keep=0;
+    PyObject *obj, *rec=Py_False, *keep=Py_False;
     if (!PyArg_ParseTuple(args, "O!|O!O!",&(DocumentObjectPy::Type),&obj,&PyBool_Type,&rec,&PyBool_Type,&keep))
         return NULL;    // NULL triggers exception
 
     DocumentObjectPy* docObj = static_cast<DocumentObjectPy*>(obj);
-    DocumentObject* copy = getDocumentPtr()->copyObject(docObj->getDocumentObjectPtr(), rec==Py_True, keep==Py_True);
+    DocumentObject* copy = getDocumentPtr()->copyObject(docObj->getDocumentObjectPtr(),
+        PyObject_IsTrue(rec) ? true : false,
+        PyObject_IsTrue(keep)? true : false);
     if (copy) {
         return copy->getPyObject();
     }
@@ -199,12 +245,12 @@ PyObject*  DocumentPy::copyObject(PyObject *args)
 
 PyObject*  DocumentPy::moveObject(PyObject *args)
 {
-    PyObject *obj, *rec=0;
+    PyObject *obj, *rec=Py_False;
     if (!PyArg_ParseTuple(args, "O!|O!",&(DocumentObjectPy::Type),&obj,&PyBool_Type,&rec))
         return NULL;    // NULL triggers exception
 
     DocumentObjectPy* docObj = static_cast<DocumentObjectPy*>(obj);
-    DocumentObject* move = getDocumentPtr()->moveObject(docObj->getDocumentObjectPtr(), rec==Py_True);
+    DocumentObject* move = getDocumentPtr()->moveObject(docObj->getDocumentObjectPtr(), PyObject_IsTrue(rec) ? true : false);
     if (move) {
         return move->getPyObject();
     }

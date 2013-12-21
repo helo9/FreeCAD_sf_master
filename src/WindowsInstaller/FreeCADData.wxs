@@ -39,6 +39,7 @@
 					<File Id="ExampleFile2" Name="PartDesignExample.FCStd"   />
 					<File Id="ExampleFile3" Name="RobotExample.FCStd"   />
 					<File Id="ExampleFile4" Name="Schenkel.stp"   />
+                    <File Id="ExampleFile5" Name="ArchDetail.FCStd" />
 				</Component>
 			</Directory>
 			<Directory Id="DataMod" Name="Mod" FileSource="../../data/Mod" >
@@ -67,6 +68,17 @@
 						</Component>
 					</Directory>
 				</Directory>
+				<!-- Raytracing resource files  -->
+				<Directory Id="DataModRay" Name="Raytracing" FileSource="../../data/Mod/Raytracing" >
+					<Directory Id="ModRaytracingTemplates" Name="Templates" FileSource="../../data/Mod/Raytracing/Templates">
+						<Component Id="CompModRaytracingTemplates" Guid="C0319A8E-7B29-428a-84B7-4A84DB44ABD3" Win64='$(var.Win_64)' KeyPath="yes">
+							<File Id="ProjectStd" Name="ProjectStd.pov"  />
+							<File Id="RadiosityNormal" Name="RadiosityNormal.pov"  />
+                            <File Id="LuxClassic" Name="LuxClassic.lxs"  />
+                            <File Id="LuxOutdoor" Name="LuxOutdoor.lxs"  />
+						</Component>
+					</Directory>
+				</Directory>
 				<!-- StartPage resource files  -->
 				<Directory Id="DataModStart" Name="Start" FileSource="../../data/Mod/Start" >
 					<Directory Id="ModStartDataStartPage" Name="StartPage" FileSource="../../data/Mod/Start/StartPage" >
@@ -92,6 +104,10 @@
 							<File Id="StartPage21" Name="LoadMRU1.py"   />
 							<File Id="StartPage22" Name="LoadMRU2.py"   />
 							<File Id="StartPage23" Name="ArchExample.png"   />
+                            <File Id="StartPage24" Name="ShipExample.png"   />
+                            <File Id="StartPage25" Name="Ship.png"   />
+                            <File Id="StartPage26" Name="Ship.py"   />
+                            <File Id="StartPage27" Name="LoadArchExample.py" />
 						</Component>
 					</Directory>
 				</Directory>

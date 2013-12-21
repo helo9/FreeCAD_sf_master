@@ -23,7 +23,7 @@
 
 __title__="FreeCAD Draft Workbench - Vector library"
 __author__ = "Yorik van Havre, Werner Mayer, Martin Burbaum, Ken Cline"
-__url__ = ["http://free-cad.sourceforge.net"]
+__url__ = ["http://www.freecadweb.org"]
 
 "a vector math library for FreeCAD"
 
@@ -145,6 +145,14 @@ def rotate(u,angle,axis=Vector(0,0,1)):
 		   xzt - ys,	yzt + xs,	c + z*z*t,	0)
 
 	return m.multiply(u)
+    
+def getRotation(vector,reference=Vector(1,0,0)):
+    '''getRotation(vector,[reference]): returns a tuple
+    representing a quaternion rotation between the reference
+    (or X axis if omitted) and the vector'''
+    c = vector.cross(reference)
+    c.normalize()
+    return (c.x,c.y,c.z,math.sqrt((vector.Length ** 2) * (reference.Length ** 2)) + vector.dot(reference))
 	
 def isNull(vector):
 	'''isNull(vector): Tests if a vector is nul vector'''

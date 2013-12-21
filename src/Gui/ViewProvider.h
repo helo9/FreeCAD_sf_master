@@ -54,8 +54,11 @@ namespace App {
   class Color;
 }
 
+class SoGroup;
+
 #include <App/PropertyContainer.h>
 #include <Base/Vector3D.h>
+
 
 namespace Gui {
     namespace TaskView {
@@ -64,6 +67,7 @@ namespace Gui {
 class View3DInventorViewer;
 class ViewProviderPy;
 class ObjectItem;
+
 
 
 /** General interface for all visual stuff in FreeCAD
@@ -90,8 +94,18 @@ public:
     SoSeparator* getAnnotation(void);
     // returns the root node of the Provider (3D)
     virtual SoSeparator* getFrontRoot(void) const {return 0;}
+    // returns the root node where the children gets collected(3D)
+    virtual SoGroup* getChildRoot(void) const {return 0;}
     // returns the root node of the Provider (3D)
     virtual SoSeparator* getBackRoot(void) const {return 0;}
+    /** deliver the children belonging to this object
+      * this method is used to deliver the objects to 
+      * the 3DView which should be grouped under its 
+      * scene graph. This affects the visibility and the 3D 
+      * position of the object. 
+      */
+    virtual std::vector<App::DocumentObject*> claimChildren3D(void) const
+    { return std::vector<App::DocumentObject*>(); }
 
     /** @name Selection handling
       * This group of methodes do the selection handling.
@@ -107,6 +121,7 @@ public:
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
     virtual SoDetail* getDetail(const char*) const { return 0; }
+    virtual std::vector<Base::Vector3d> getPickedPoints(const SoPickedPoint *) const;
     /// return the higlight lines for a given element or the whole shape
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const
     { return std::vector<Base::Vector3d>(); };
@@ -178,6 +193,7 @@ public:
     void setVisible(bool);
     bool isVisible() const;
     //@}
+
 
     /** @name Edit methods
      * if the Viewprovider goes in edit mode
@@ -265,10 +281,14 @@ protected:
     std::vector<std::string> getDisplayMaskModes() const;
     void setDefaultMode(int);
     //@}
-    /// Helper method to get picked entities while editing
+    /** Helper method to get picked entities while editing.
+     * It's in the responsibility of the caller to delete the returned instance.
+     */
     SoPickedPoint* getPointOnRay(const SbVec2s& pos,
                                  const View3DInventorViewer* viewer) const;
-    /// Helper method to get picked entities while editing
+    /** Helper method to get picked entities while editing.
+     * It's in the responsibility of the caller to delete the returned instance.
+     */
     SoPickedPoint* getPointOnRay(const SbVec3f& pos, const SbVec3f& dir,
                                  const View3DInventorViewer* viewer) const;
     /// Reimplemented from subclass

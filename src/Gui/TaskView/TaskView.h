@@ -57,6 +57,18 @@ public:
     //~TaskContent();
 };
 
+class GuiExport TaskGroup : public iisTaskGroup, public TaskContent
+{
+    Q_OBJECT
+
+public:
+    TaskGroup(QWidget *parent = 0);
+    ~TaskGroup();
+
+protected:
+    void actionEvent (QActionEvent*);
+};
+
 /// Father class of content with header and Icon
 class GuiExport TaskBox : public iisTaskBox, public TaskContent
 {
@@ -127,6 +139,8 @@ protected:
 
     void slotActiveDocument(const App::Document&);
     void slotDeletedDocument();
+    void slotUndoDocument(const App::Document&);
+    void slotRedoDocument(const App::Document&);
 
     std::vector<TaskWatcher*> ActiveWatcher;
 
@@ -136,6 +150,8 @@ protected:
 
     Connection connectApplicationActiveDocument;
     Connection connectApplicationDeleteDocument;
+    Connection connectApplicationUndoDocument;
+    Connection connectApplicationRedoDocument;
 };
 
 } //namespace TaskView

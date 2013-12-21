@@ -26,6 +26,10 @@
 #ifndef __InventorAll__
 # include "InventorAll.h"
 # include <sstream>
+# include <QImage>
+# include <QGLFramebufferObject>
+# include <Inventor/SbViewVolume.h>
+# include <Inventor/nodes/SoCamera.h>
 #endif
 
 
@@ -37,6 +41,7 @@
 #include "NavigationStyle.h"
 #include "SoFCSelection.h"
 #include "SoFCSelectionAction.h"
+#include "SoFCOffscreenRenderer.h"
 #include "SoFCVectorizeSVGAction.h"
 #include "SoFCVectorizeU3DAction.h"
 #include "SoFCDB.h"
@@ -120,6 +125,10 @@ void View3DInventorPy::init_type()
         "\n"
         "Return the according 3D point on the focal plane to the given 2D point (in\n"
         "pixel coordinates).\n");
+    add_varargs_method("getPointOnScreen",&View3DInventorPy::getPointOnScreen,
+        "getPointOnScreen(3D vector) -> pixel coords (as integer)\n"
+        "\n"
+        "Return the projected 3D point (in pixel coordinates).\n");
     add_varargs_method("addEventCallback",&View3DInventorPy::addEventCallback,"addEventCallback()");
     add_varargs_method("removeEventCallback",&View3DInventorPy::removeEventCallback,"removeEventCallback()");
     add_varargs_method("setAnnotation",&View3DInventorPy::setAnnotation,"setAnnotation()");
@@ -135,6 +144,9 @@ void View3DInventorPy::init_type()
     add_varargs_method("listNavigationTypes",&View3DInventorPy::listNavigationTypes,"listNavigationTypes()");
     add_varargs_method("getNavigationType",&View3DInventorPy::getNavigationType,"getNavigationType()");
     add_varargs_method("setNavigationType",&View3DInventorPy::setNavigationType,"setNavigationType()");
+    add_varargs_method("setAxisCross",&View3DInventorPy::setAxisCross,"switch the big axis-cross on and off");
+    add_varargs_method("hasAxisCross",&View3DInventorPy::hasAxisCross,"check if the big axis-cross is on or off()");
+
 }
 
 View3DInventorPy::View3DInventorPy(View3DInventor *vi)
@@ -464,7 +476,7 @@ Py::Object View3DInventorPy::viewRotateRight(const Py::Tuple& args)
 Py::Object View3DInventorPy::setCameraOrientation(const Py::Tuple& args)
 {
     PyObject* o;
-    PyObject* m=0;
+    PyObject* m=Py_False;
     if (!PyArg_ParseTuple(args.ptr(), "O!|O!", &PyTuple_Type, &o, &PyBool_Type, &m))
         throw Py::Exception();
 
@@ -474,7 +486,7 @@ Py::Object View3DInventorPy::setCameraOrientation(const Py::Tuple& args)
         float q1 = (float)Py::Float(tuple[1]);
         float q2 = (float)Py::Float(tuple[2]);
         float q3 = (float)Py::Float(tuple[3]);
-        _view->getViewer()->setCameraOrientation(SbRotation(q0, q1, q2, q3), m==Py_True);
+        _view->getViewer()->setCameraOrientation(SbRotation(q0, q1, q2, q3), PyObject_IsTrue(m));
     }
     catch (const Base::Exception& e) {
         throw Py::Exception(e.what());
@@ -556,6 +568,37 @@ Py::Object View3DInventorPy::isAnimationEnabled(const Py::Tuple& args)
     return Py::Boolean(ok ? true : false);
 }
 
+void View3DInventorPy::createImageFromFramebuffer(int backgroundType, int width, int height, QImage& img)
+{
+    QGLFramebufferObject fbo(width, height, QGLFramebufferObject::Depth);
+    const SbColor col = _view->getViewer()->getBackgroundColor();
+    bool on = _view->getViewer()->hasGradientBackground();
+
+    switch(backgroundType){
+        case 0: // Current
+            break;
+        case 1: // Black
+            _view->getViewer()->setBackgroundColor(SbColor(0.0f,0.0f,0.0f));
+            _view->getViewer()->setGradientBackground(false);
+            break;
+        case 2: // White
+            _view->getViewer()->setBackgroundColor(SbColor(1.0f,1.0f,1.0f));
+            _view->getViewer()->setGradientBackground(false);
+            break;
+        case 3: // Transparent
+            _view->getViewer()->setBackgroundColor(SbColor(1.0f,1.0f,1.0f));
+            _view->getViewer()->setGradientBackground(false);
+            break;
+        default:
+            break;
+    }
+
+    _view->getViewer()->renderToFramebuffer(&fbo);
+    _view->getViewer()->setBackgroundColor(col);
+    _view->getViewer()->setGradientBackground(on);
+    img = fbo.toImage();
+}
+
 Py::Object View3DInventorPy::saveImage(const Py::Tuple& args)
 {
     char *cFileName,*cImageType="Current",*cComment="$MIBA";
@@ -587,25 +630,25 @@ Py::Object View3DInventorPy::saveImage(const Py::Tuple& args)
     else 
         throw Py::Exception("Parameter 4 have to be (Current|Black|White|Transparent)");
 #endif
+    QImage img;
+    if (App::GetApplication().GetParameterGroupByPath
+        ("User parameter:BaseApp/Preferences/Document")->GetBool("DisablePBuffers",false)) {
+        createImageFromFramebuffer(t, w, h, img);
+    }
+    else {
+        try {
+            _view->getViewer()->savePicture(w, h, t, img);
+        }
+        catch (const Base::Exception&) {
+            createImageFromFramebuffer(t, w, h, img);
+        }
+    }
 
-    try {
-        QColor c;
-        _view->getViewer()->savePicture(cFileName,w,h,t,cComment);
-        return Py::None();
-    }
-    catch (const Base::Exception& e) {
-        Base::Console().Log("Try disabling the use of pbuffers, set the environment variables\n"
-                            "COIN_GLXGLUE_NO_PBUFFERS=1\n"
-                            "COIN_GLXGLUE_NO_GLX13_PBUFFERS=1\n"
-                            "and re-run the application.\n");
-        throw Py::Exception(e.what());
-    }
-    catch (const std::exception& e) {
-        throw Py::Exception(e.what());
-    }
-    catch(...) {
-        throw Py::Exception("Unknown C++ exception");
-    }
+    SoFCOffscreenRenderer& renderer = SoFCOffscreenRenderer::instance();
+    SoCamera* cam = _view->getViewer()->getCamera();
+    renderer.writeToImageFile(cFileName, cComment, cam->getViewVolume().getMatrix(), img);
+
+    return Py::None();
 }
 
 Py::Object View3DInventorPy::saveVectorGraphic(const Py::Tuple& args)
@@ -1135,6 +1178,56 @@ Py::Object View3DInventorPy::getPoint(const Py::Tuple& args)
     try {
         SbVec3f pt = _view->getViewer()->getPointOnScreen(SbVec2s(x,y));
         return Py::Vector(Base::Vector3f(pt[0], pt[1], pt[2]));
+    }
+    catch (const Base::Exception& e) {
+        throw Py::Exception(e.what());
+    }
+    catch (const Py::Exception&) {
+        throw;
+    }
+}
+
+Py::Object View3DInventorPy::getPointOnScreen(const Py::Tuple& args)
+{
+    PyObject* v;
+    double vx,vy,vz;
+    if (PyArg_ParseTuple(args.ptr(), "O!", &Base::VectorPy::Type, &v)) {
+        Base::Vector3d* vec = static_cast<Base::VectorPy*>(v)->getVectorPtr();
+        vx = vec->x;
+        vy = vec->y;
+        vz = vec->z;
+    }
+    else {
+        PyErr_Clear();
+        if (!PyArg_ParseTuple(args.ptr(), "ddd", &vx,&vy,&vz)) {
+            throw Py::Exception("Wrong argument, Vector or three floats expected expected");
+        }
+    }
+
+    try {
+        const SbViewportRegion& vp = _view->getViewer()->getViewportRegion();
+        float fRatio = vp.getViewportAspectRatio();
+        const SbVec2s& sp = vp.getViewportSizePixels();
+        //float dX, dY; vp.getViewportSize().getValue(dX, dY);
+        SbViewVolume vv = _view->getViewer()->getCamera()->getViewVolume(fRatio);
+
+        SbVec3f pt(vx,vy,vz);
+        vv.projectToScreen(pt, pt);
+
+        //if (fRatio > 1.0f) {
+        //    pt[0] = (pt[0] - 0.5f*dX) / fRatio + 0.5f*dX;
+        //}
+        //else {
+        //    pt[1] = (pt[1] - 0.5f*dY) * fRatio + 0.5f*dY;
+        //}
+
+        int x = pt[0] * sp[0];
+        int y = pt[1] * sp[1];
+        Py::Tuple tuple(2);
+        tuple.setItem(0, Py::Int(x));
+        tuple.setItem(1, Py::Int(y));
+
+        return tuple;
     }
     catch (const Base::Exception& e) {
         throw Py::Exception(e.what());
@@ -2010,4 +2103,21 @@ Py::Object View3DInventorPy::removeEventCallbackPivy(const Py::Tuple& args)
     catch (const Py::Exception&) {
         throw;
     }
+}
+
+Py::Object View3DInventorPy::setAxisCross(const Py::Tuple& args)
+{
+    int ok;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &ok))
+        throw Py::Exception();
+    _view->getViewer()->setAxisCross(ok!=0);
+    return Py::None();
+}
+
+Py::Object View3DInventorPy::hasAxisCross(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), ""))
+        throw Py::Exception();
+    SbBool ok = _view->getViewer()->hasAxisCross();
+    return Py::Boolean(ok ? true : false);
 }

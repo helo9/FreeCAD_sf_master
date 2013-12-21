@@ -80,6 +80,8 @@ public:
     /// get the geometry as python objects
     Py::Tuple getPyGeometry(void) const;
 
+    /// retrieves the index of a point
+    int getPointId(int geoId, PointPos pos) const;
     /// retrieves a point
     Base::Vector3d getPoint(int geoId, PointPos pos);
 
@@ -172,6 +174,8 @@ public:
     int addPointOnObjectConstraint(int geoId1, PointPos pos1, int geoId2);
     /// add a symmetric constraint between two points with respect to a line
     int addSymmetricConstraint(int geoId1, PointPos pos1, int geoId2, PointPos pos2, int geoId3);
+    /// add a symmetric constraint between three points, the last point is in the middle of the first two
+    int addSymmetricConstraint(int geoId1, PointPos pos1, int geoId2, PointPos pos2, int geoId3, PointPos pos3);
     //@}
 
     enum GeoType {
@@ -218,8 +222,6 @@ protected:
     bool isFine;
 
 private:
-    /// retrieves the index of a point
-    int getPointId(int geoId, PointPos pos) const;
 
     bool updateGeometry(void);
 

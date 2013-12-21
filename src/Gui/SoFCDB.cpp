@@ -43,9 +43,11 @@
 #include "SoTextLabel.h"
 #include "SoNavigationDragger.h"
 #include "Inventor/SoDrawingGrid.h"
+#include "Inventor/SoAutoZoomTranslation.h"
 
 #include "propertyeditor/PropertyItem.h"
 #include "NavigationStyle.h"
+#include "Flag.h"
 
 using namespace Gui;
 using namespace Gui::Inventor;
@@ -97,6 +99,7 @@ void Gui::SoFCDB::init()
     SoAxisCrossKit                  ::initClass();
     SoRegPoint                      ::initClass();
     SoDrawingGrid                   ::initClass();
+    SoAutoZoomTranslation           ::initClass();
 
     PropertyItem                    ::init();
     PropertySeparatorItem           ::init();
@@ -110,7 +113,6 @@ void Gui::SoFCDB::init()
     PropertyAngleItem               ::init();
     PropertyBoolItem                ::init();
     PropertyVectorItem              ::init();
-    PropertyDoubleVectorItem        ::init();
     PropertyMatrixItem              ::init();
     PropertyPlacementItem           ::init();
     PropertyEnumItem                ::init();
@@ -119,6 +121,7 @@ void Gui::SoFCDB::init()
     PropertyFileItem                ::init();
     PropertyPathItem                ::init();
     PropertyTransientFileItem       ::init();
+    PropertyLinkItem                ::init();
 
     NavigationStyle                 ::init();
     UserNavigationStyle             ::init();
@@ -126,6 +129,9 @@ void Gui::SoFCDB::init()
     CADNavigationStyle              ::init();
     BlenderNavigationStyle          ::init();
     TouchpadNavigationStyle         ::init();
+
+    GLGraphicsItem                  ::init();
+    GLFlagWindow                    ::init();
 
     qRegisterMetaType<Base::Vector3f>("Base::Vector3f");
     qRegisterMetaType<Base::Vector3d>("Base::Vector3d");

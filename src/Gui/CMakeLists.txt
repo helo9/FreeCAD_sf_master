@@ -3,6 +3,7 @@
 if(WIN32)
 add_definitions(-DFCGui -DQIIS_MAKEDLL)
 endif(WIN32)
+
 if (FREECAD_USE_3DCONNEXION)
 add_definitions(-D_USE_3DCONNEXION_SDK)
 endif(FREECAD_USE_3DCONNEXION)
@@ -59,6 +60,30 @@ IF(SPNAV_FOUND)
     )
 ENDIF(SPNAV_FOUND)
 
+if(SHIBOKEN_INCLUDE_DIR)
+    add_definitions(-DHAVE_SHIBOKEN)
+    include_directories(
+        ${SHIBOKEN_INCLUDE_DIR}
+    )
+    set(FreeCADGui_LIBS
+        ${FreeCADGui_LIBS}
+        ${SHIBOKEN_LIBRARY}
+    )
+endif(SHIBOKEN_INCLUDE_DIR)
+
+if(PYSIDE_INCLUDE_DIR)
+    add_definitions(-DHAVE_PYSIDE)
+    include_directories(
+        ${PYSIDE_INCLUDE_DIR}
+        ${PYSIDE_INCLUDE_DIR}/QtCore
+        ${PYSIDE_INCLUDE_DIR}/QtGui
+    )
+    set(FreeCADGui_LIBS
+        ${FreeCADGui_LIBS}
+        ${PYSIDE_LIBRARY}
+    )
+endif(PYSIDE_INCLUDE_DIR)
+
 generate_from_xml(DocumentPy)
 generate_from_xml(PythonWorkbenchPy)
 generate_from_xml(ViewProviderPy)
@@ -97,10 +122,14 @@ set(Gui_MOC_HDRS
     CallTips.h
     CombiView.h
     Control.h
+    Clipping.h
     DemoMode.h
     DownloadDialog.h
+    DownloadItem.h
+    DownloadManager.h
     DlgActionsImp.h
     DlgActivateWindowImp.h
+    DlgUnitsCalculatorImp.h
     DlgCommandsImp.h
     DlgCustomizeImp.h
     DlgCustomizeSpaceball.h
@@ -145,6 +174,7 @@ set(Gui_MOC_HDRS
     NetworkRetriever.h
     OnlineDocumentation.h
     Placement.h
+    InputField.h
     PrefWidgets.h
     ProgressBar.h
     PropertyPage.h
@@ -164,6 +194,7 @@ set(Gui_MOC_HDRS
     Transform.h
     Tree.h
     TreeView.h
+    ProjectView.h
     View3DInventor.h
     WidgetFactory.h
     Widgets.h
@@ -185,9 +216,11 @@ fc_wrap_cpp(Gui_MOC_SRCS ${Gui_MOC_HDRS})
 
 SET(Gui_UIC_SRCS
     AboutApplication.ui
+    Clipping.ui
     DemoMode.ui
     DlgActions.ui
     DlgActivateWindow.ui
+    DlgUnitsCalculator.ui
     DlgAuthorization.ui
     DlgChooseIcon.ui
     DlgCommands.ui
@@ -219,6 +252,8 @@ SET(Gui_UIC_SRCS
     DlgTreeWidget.ui
     DlgLocationAngle.ui
     DlgLocationPos.ui
+    DownloadManager.ui
+    DownloadItem.ui
     MouseButtons.ui
     SceneInspector.ui
     InputVector.ui
@@ -259,8 +294,10 @@ SOURCE_GROUP("Command" FILES ${Command_SRCS})
 
 # The dialog sources
 SET(Dialog_CPP_SRCS
+    Clipping.cpp
     DemoMode.cpp
     DlgActivateWindowImp.cpp
+    DlgUnitsCalculatorImp.cpp
     DlgDisplayPropertiesImp.cpp
     DlgInputDialogImp.cpp
     DlgMacroExecuteImp.cpp
@@ -281,11 +318,15 @@ SET(Dialog_CPP_SRCS
     TextureMapping.cpp
     Transform.cpp
     DownloadDialog.cpp
+    DownloadItem.cpp
+    DownloadManager.cpp
 )
 
 SET(Dialog_HPP_SRCS
+    Clipping.h
     DemoMode.h
     DlgActivateWindowImp.h
+    DlgUnitsCalculatorImp.h
     DlgDisplayPropertiesImp.h
     DlgInputDialogImp.h
     DlgMacroExecuteImp.h
@@ -306,17 +347,23 @@ SET(Dialog_HPP_SRCS
     TextureMapping.h
     Transform.h
     DownloadDialog.h
+    DownloadItem.h
+    DownloadManager.h
 )
 
 SET(Dialog_SRCS
     ${Dialog_CPP_SRCS}
     ${Dialog_HPP_SRCS}
     AboutApplication.ui
+    Clipping.ui
     DemoMode.ui
     DlgActivateWindow.ui
+    DlgUnitsCalculator.ui
     DlgAuthorization.ui
     DlgDisplayProperties.ui
     DlgInputDialog.ui
+    DlgLocationAngle.ui
+    DlgLocationPos.ui
     DlgMacroExecute.ui
     DlgRunExternal.ui
     DlgMacroRecord.ui
@@ -326,6 +373,8 @@ SET(Dialog_SRCS
     DlgProjectUtility.ui
     DlgTipOfTheDay.ui
     DlgTreeWidget.ui
+    DownloadManager.ui
+    DownloadItem.ui
     MouseButtons.ui
     InputVector.ui
     Placement.ui
@@ -424,6 +473,7 @@ SET(Dock_Windows_CPP_SRCS
     ToolBox.cpp
     Tree.cpp
     TreeView.cpp
+    ProjectView.cpp
 )
 SET(Dock_Windows_HPP_SRCS
     CombiView.h
@@ -436,6 +486,7 @@ SET(Dock_Windows_HPP_SRCS
     ToolBox.h
     Tree.h
     TreeView.h
+    ProjectView.h
 )
 SET(Dock_Windows_SRCS
     ${Dock_Windows_CPP_SRCS}
@@ -562,7 +613,7 @@ SOURCE_GROUP("Widget\\iisTaskPanel\\Mocs" FILES ${iis_MOC_SRCS})
 #SET(Resource_RCS
 #   Icons/resource.qrc
 #   Language/translation.qrc)
-#fc_add_resources(Resource_SRCS ${Resource_RCS})
+#qt4_add_resources(Resource_SRCS ${Resource_RCS})
 #SET(Resource_SRCS
 #   ${Resource_SRCS}
 #   Icons/resource.qrc
@@ -573,6 +624,7 @@ SOURCE_GROUP("Widget\\iisTaskPanel\\Mocs" FILES ${iis_MOC_SRCS})
 # The 3d view
 SET(View3D_CPP_SRCS
     Flag.cpp
+    GLPainter.cpp
     MouseSelection.cpp
     NavigationStyle.cpp
     InventorNavigationStyle.cpp
@@ -589,6 +641,7 @@ SET(View3D_CPP_SRCS
 SET(View3D_SRCS
     ${View3D_CPP_SRCS}
     Flag.h
+    GLPainter.h
     MouseSelection.h
     NavigationStyle.h
     SplitView3DInventor.h
@@ -617,6 +670,9 @@ SET(Viewprovider_CPP_SRCS
     ViewProviderPythonFeature.cpp
     ViewProviderVRMLObject.cpp
     ViewProviderBuilder.cpp
+    ViewProviderPlacement.cpp
+    ViewProviderPlane.cpp
+    ViewProviderMaterialObject.cpp
 )
 SET(Viewprovider_SRCS
     ${Viewprovider_CPP_SRCS}
@@ -632,12 +688,16 @@ SET(Viewprovider_SRCS
     ViewProviderPythonFeature.h
     ViewProviderVRMLObject.h
     ViewProviderBuilder.h
+    ViewProviderPlacement.h
+    ViewProviderPlane.h
+    ViewProviderMaterialObject.h
 )
 SOURCE_GROUP("View3D\\Viewprovider" FILES ${Viewprovider_SRCS})
 
 # The Inventor sources
 SET(Inventor_CPP_SRCS
     Inventor/SoDrawingGrid.cpp
+    Inventor/SoAutoZoomTranslation.cpp
     SoFCBackgroundGradient.cpp
     SoFCBoundingBox.cpp
     SoFCColorBar.cpp
@@ -658,6 +718,7 @@ SET(Inventor_CPP_SRCS
 SET(Inventor_SRCS
     ${Inventor_CPP_SRCS}
     Inventor/SoDrawingGrid.h
+    Inventor/SoAutoZoomTranslation.h
     SoFCBackgroundGradient.h
     SoFCBoundingBox.h
     SoFCColorBar.h
@@ -683,6 +744,7 @@ SET(Widget_CPP_SRCS
     MainWindow.cpp
     MDIView.cpp
     PrefWidgets.cpp
+    InputField.cpp
     ProgressBar.cpp
     SpinBox.cpp
     Splashscreen.cpp
@@ -695,6 +757,7 @@ SET(Widget_HPP_SRCS
     MainWindow.h
     MDIView.h
     PrefWidgets.h
+    InputField.h
     ProgressBar.h
     SpinBox.h
     Splashscreen.h
@@ -871,7 +934,13 @@ else(WIN32)
     INSTALL(TARGETS FreeCADGui
         LIBRARY DESTINATION lib
     )
-    INSTALL(FILES Icons/freecad.xpm Icons/freecad-doc.png
+    INSTALL(FILES Icons/freecad.xpm
+        Icons/freecad-icon-16.png
+        Icons/freecad-icon-32.png
+        Icons/freecad-icon-48.png
+        Icons/freecad-icon-64.png
+        Icons/freecad.svg
+        Icons/freecad-doc.png
         DESTINATION ${CMAKE_INSTALL_DATADIR}
     )
 endif(WIN32)

@@ -28,6 +28,7 @@
 #include <CXX/Extensions.hxx>
 
 class SoEventCallback;
+class QImage;
 
 namespace Gui {
 
@@ -81,6 +82,7 @@ public:
     Py::Object getObjectsInfo(const Py::Tuple&);
     Py::Object getSize(const Py::Tuple&);
     Py::Object getPoint(const Py::Tuple&);
+    Py::Object getPointOnScreen(const Py::Tuple&);
     Py::Object addEventCallback(const Py::Tuple&);
     Py::Object removeEventCallback(const Py::Tuple&);
     Py::Object setAnnotation(const Py::Tuple&);
@@ -92,6 +94,8 @@ public:
     Py::Object listNavigationTypes(const Py::Tuple&);
     Py::Object getNavigationType(const Py::Tuple&);
     Py::Object setNavigationType(const Py::Tuple&);
+    Py::Object setAxisCross(const Py::Tuple&);
+    Py::Object hasAxisCross(const Py::Tuple&);
 
 private:
     static void eventCallback(void * ud, SoEventCallback * n);
@@ -102,6 +106,7 @@ private:
     typedef PyObject* (*method_varargs_handler)(PyObject *_self, PyObject *_args);
     static method_varargs_handler pycxx_handler;
     static PyObject *method_varargs_ext_handler(PyObject *_self, PyObject *_args);
+    void createImageFromFramebuffer(int backgroundType, int width, int height, QImage&);
 
 private:
     std::list<PyObject*> callbacks;

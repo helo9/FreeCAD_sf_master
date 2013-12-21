@@ -290,6 +290,11 @@ void ViewProviderGeometryObject::unsetEdit(int ModNum)
     // The manipulator has a sensor as user data and this sensor contains the view provider
     SoCenterballManip * manip = static_cast<SoCenterballManip*>(path->getTail());
     SoNodeSensor* sensor = reinterpret_cast<SoNodeSensor*>(manip->getUserData());
+    // #0000939: Pressing Escape while pivoting a box crashes
+    // #0000942: Crash when 2xdouble-click on part
+    SoDragger* dragger = manip->getDragger();
+    if (dragger && dragger->getHandleEventAction())
+        dragger->grabEventsCleanup();
 
     // detach sensor
     sensor->detach();
@@ -477,13 +482,17 @@ SoPickedPoint* ViewProviderGeometryObject::getPickedPoint(const SbVec2s& pos, co
 void ViewProviderGeometryObject::showBoundingBox(bool show)
 {
     if (!pcBoundSwitch && show) {
+        ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/View");
+        unsigned long bbcol = hGrp->GetUnsigned("BoundingBoxColor",4294967295UL); // white (255,255,255)
+        float r,g,b;
+        r = ((bbcol >> 24) & 0xff) / 255.0; g = ((bbcol >> 16) & 0xff) / 255.0; b = ((bbcol >> 8) & 0xff) / 255.0;
         pcBoundSwitch = new SoSwitch();
         SoSeparator* pBoundingSep = new SoSeparator();
         SoDrawStyle* lineStyle = new SoDrawStyle;
         lineStyle->lineWidth = 2.0f;
         pBoundingSep->addChild(lineStyle);
         SoBaseColor* color = new SoBaseColor();
-        color->rgb.setValue(1.0f, 1.0f, 1.0f);
+        color->rgb.setValue(r, g, b);
         pBoundingSep->addChild(color);
 
         pBoundingSep->addChild(new SoTransform());

@@ -132,13 +132,12 @@ class Node:
             h = self.arguments['h']
             r1 ,r2 = self.arguments['r1'], self.arguments['r2']
             if '$fn' in self.arguments and self.arguments['$fn'] > 2 \
-            and self.arguments['$fn']<=Node.fnmin:
-                if r1 == r2:
-                    import Draft
-                    base = Draft.makePolygon(int(self.arguments['$fn']),r1)
-                    obj = doc.addObject("Part::Extrusion",'prism')
-                    obj.Base= base
-                    obj.Dir = (0,0,h)
+            and self.arguments['$fn']<=Node.fnmin: # polygonal
+                if r1 == r2: # prismatic
+                    obj = doc.addObject("Part::Prism","prism")
+                    obj.Polygon = int(self.arguments['$fn'])
+                    obj.Circumradius  = r1
+                    obj.Height  = h
                     if self.arguments['center']:
                         center(obj,0,0,h)
                     base.ViewObject.hide()
@@ -409,6 +408,8 @@ class Node:
                     raise(NotImplementedError)
                 if obj: #handle origin and scale
                     if scale is not None and scale !=1:
+                        if origin is not None and any([c != 0 for c in origin]):
+                            raise(NotImplementedError)# order of transformations unkown
                         child = obj
                         m1=FreeCAD.Matrix()
                         m1.scale(scale,scale,scale)
@@ -416,7 +417,7 @@ class Node:
                         MatrixTransform(obj,m1,child) #This object is not mutable from the GUI
                         ViewProviderTree(obj.ViewObject)
                     elif origin is not None and any([c != 0 for c in origin]):
-                        placement=FreeCAD.Placement(FreeCAD.Vector(*origin),FreeCAD.Rotation())
+                        placement=FreeCAD.Placement(FreeCAD.Vector(*[-c for c in origin]),FreeCAD.Rotation())
                         obj.Placement=placement.multiply(obj.Placement)
                 else:
                     FreeCAD.Console.ErrorMessage('Import of %s failed\n' % (filename))
@@ -476,12 +477,17 @@ class Node:
             else:
                 raise(NotImplementedError)
         elif namel == 'surface':
-            import os
-            scadstr = 'surface(file = "%s", center = %s );' % \
-                (self.arguments['file'], 'true' if self.arguments['center'] else 'false')
-            docname=os.path.split(self.arguments['file'])[1]
-            objname,extension = docname.split('.',1)
-            obj = openscadmesh(doc,scadstr,objname)
+            obj = doc.addObject("Part::Feature",namel) #include filename?
+            obj.Shape,xoff,yoff=makeSurfaceVolume(self.arguments['file'])
+            if self.arguments['center']:
+                center(obj,xoff,yoff,0.0)
+            return obj
+            #import os
+            #scadstr = 'surface(file = "%s", center = %s );' % \
+            #    (self.arguments['file'], 'true' if self.arguments['center'] else 'false')
+            #docname=os.path.split(self.arguments['file'])[1]
+            #objname,extension = docname.split('.',1)
+            #obj = openscadmesh(doc,scadstr,objname)
 
         elif namel in ['glide','hull']:
             raise(NotImplementedError)
@@ -652,14 +658,18 @@ def readfile(filename):
     isopenscad = relname.lower().endswith('.scad')
     if isopenscad:
         tmpfile=callopenscad(filename)
-        lastimportpath = os.getcwd() #https://github.com/openscad/openscad/issues/128
+        if OpenSCADUtils.workaroundforissue128needed():
+            lastimportpath = os.getcwd() #https://github.com/openscad/openscad/issues/128
         f = pythonopen(tmpfile)
     else:
         f = pythonopen(filename)
     rootnode=parsenode(f.read())[0]
     f.close()
-    if isopenscad:
-        os.unlink(tmpfile)
+    if isopenscad and tmpfile:
+        try:
+            os.unlink(tmpfile)
+        except OSError:
+            pass
     return rootnode.flattengroups()
 
 def open(filename):
@@ -680,7 +690,6 @@ def insert(filename,docname):
     #doc.recompute()
 
 
-import FreeCAD
 
 global dxfcache
 dxfcache = {}

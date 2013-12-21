@@ -370,18 +370,27 @@ TopoDS_Shape TopoShape::getSubShape(const char* Type) const
         int index=std::atoi(&shapetype[4]);
         TopTools_IndexedMapOfShape anIndices;
         TopExp::MapShapes(this->_Shape, TopAbs_FACE, anIndices);
+        // To avoid a segmentation fault we have to check if container is empty
+        if (anIndices.IsEmpty())
+            Standard_Failure::Raise("Shape has no faces");
         return anIndices.FindKey(index);
     }
     else if (shapetype.size() > 4 && shapetype.substr(0,4) == "Edge") {
         int index=std::atoi(&shapetype[4]);
         TopTools_IndexedMapOfShape anIndices;
         TopExp::MapShapes(this->_Shape, TopAbs_EDGE, anIndices);
+        // To avoid a segmentation fault we have to check if container is empty
+        if (anIndices.IsEmpty())
+            Standard_Failure::Raise("Shape has no edges");
         return anIndices.FindKey(index);
     }
     else if (shapetype.size() > 6 && shapetype.substr(0,6) == "Vertex") {
         int index=std::atoi(&shapetype[6]);
         TopTools_IndexedMapOfShape anIndices;
         TopExp::MapShapes(this->_Shape, TopAbs_VERTEX, anIndices);
+        // To avoid a segmentation fault we have to check if container is empty
+        if (anIndices.IsEmpty())
+            Standard_Failure::Raise("Shape has no vertexes");
         return anIndices.FindKey(index);
     }
 
@@ -1297,7 +1306,7 @@ TopoDS_Shape TopoShape::section(TopoDS_Shape shape) const
 std::list<TopoDS_Wire> TopoShape::slice(const Base::Vector3d& dir, double d) const
 {
     CrossSection cs(dir.x, dir.y, dir.z, this->_Shape);
-    return cs.section(d);
+    return cs.slice(d);
 }
 
 TopoDS_Compound TopoShape::slices(const Base::Vector3d& dir, const std::vector<double>& d) const
@@ -1305,7 +1314,7 @@ TopoDS_Compound TopoShape::slices(const Base::Vector3d& dir, const std::vector<d
     std::vector< std::list<TopoDS_Wire> > wire_list;
     CrossSection cs(dir.x, dir.y, dir.z, this->_Shape);
     for (std::vector<double>::const_iterator jt = d.begin(); jt != d.end(); ++jt) {
-        wire_list.push_back(cs.section(*jt));
+        wire_list.push_back(cs.slice(*jt));
     }
 
     std::vector< std::list<TopoDS_Wire> >::const_iterator ft;
@@ -1338,7 +1347,8 @@ TopoDS_Shape TopoShape::makePipe(const TopoDS_Shape& profile) const
 
 TopoDS_Shape TopoShape::makePipeShell(const TopTools_ListOfShape& profiles,
                                       const Standard_Boolean make_solid,
-                                      const Standard_Boolean isFrenet) const
+                                      const Standard_Boolean isFrenet,
+                                      int transition) const
 {
     if (this->_Shape.IsNull())
         Standard_Failure::Raise("Cannot sweep along empty spine");
@@ -1346,7 +1356,17 @@ TopoDS_Shape TopoShape::makePipeShell(const TopTools_ListOfShape& profiles,
         Standard_Failure::Raise("Spine shape is not a wire");
 
     BRepOffsetAPI_MakePipeShell mkPipeShell(TopoDS::Wire(this->_Shape));
+    BRepBuilderAPI_TransitionMode transMode;
+    switch (transition) {
+        case 1: transMode = BRepBuilderAPI_RightCorner;
+            break;
+        case 2: transMode = BRepBuilderAPI_RoundCorner;
+            break;
+        default: transMode = BRepBuilderAPI_Transformed;
+            break;
+    }
     mkPipeShell.SetMode(isFrenet);
+    mkPipeShell.SetTransitionMode(transMode);
     TopTools_ListIteratorOfListOfShape it;
     for (it.Initialize(profiles); it.More(); it.Next()) {
         mkPipeShell.Add(TopoDS_Shape(it.Value()));
@@ -1523,7 +1543,8 @@ TopoDS_Shape TopoShape::makeSweep(const TopoDS_Shape& profile, double tol, int f
 
 TopoDS_Shape TopoShape::makeHelix(Standard_Real pitch, Standard_Real height,
                                   Standard_Real radius, Standard_Real angle,
-                                  Standard_Boolean leftHanded) const
+                                  Standard_Boolean leftHanded,
+                                  Standard_Boolean newStyle) const
 {
     if (pitch < Precision::Confusion())
         Standard_Failure::Raise("Pitch of helix too small");
@@ -1531,12 +1552,11 @@ TopoDS_Shape TopoShape::makeHelix(Standard_Real pitch, Standard_Real height,
     if (height < Precision::Confusion())
         Standard_Failure::Raise("Height of helix too small");
 
-    if (radius < Precision::Confusion())
-        Standard_Failure::Raise("Radius of helix too small");
-
     gp_Ax2 cylAx2(gp_Pnt(0.0,0.0,0.0) , gp::DZ());
     Handle_Geom_Surface surf;
     if (angle < Precision::Confusion()) {
+        if (radius < Precision::Confusion())
+            Standard_Failure::Raise("Radius of helix too small");
         surf = new Geom_CylindricalSurface(cylAx2, radius);
     }
     else {
@@ -1559,6 +1579,18 @@ TopoDS_Shape TopoShape::makeHelix(Standard_Real pitch, Standard_Real height,
     Handle(Geom2d_Line) line = new Geom2d_Line(aAx2d);
     gp_Pnt2d beg = line->Value(0);
     gp_Pnt2d end = line->Value(sqrt(4.0*M_PI*M_PI+pitch*pitch)*(height/pitch));
+
+    if (newStyle) {
+        // See discussion at 0001247: Part Conical Helix Height/Pitch Incorrect
+        if (angle >= Precision::Confusion()) {
+            // calculate end point for conical helix
+            Standard_Real v = height / cos(angle);
+            Standard_Real u = (height/pitch) * 2.0 * M_PI;
+            gp_Pnt2d cend(u, v);
+            end = cend;
+        }
+    }
+
     Handle(Geom2d_TrimmedCurve) segm = GCE2d_MakeSegment(beg , end);
 
     TopoDS_Edge edgeOnSurf = BRepBuilderAPI_MakeEdge(segm , surf);
@@ -1681,21 +1713,107 @@ TopoDS_Shape TopoShape::revolve(const gp_Ax1& axis, double d) const
     return mkRevol.Shape();
 }
 
-TopoDS_Shape TopoShape::makeThickSolid(const TopTools_ListOfShape& remFace,
-                                       Standard_Real offset, Standard_Real tolerance) const
-{
-    BRepOffsetAPI_MakeThickSolid mkThick(this->_Shape, remFace, offset, tolerance);
-    return mkThick.Shape();
-}
+//#include <BRepFill.hxx>
+//#include <BRepTools_Quilt.hxx>
 
-TopoDS_Shape TopoShape::makeOffset(double offset, double tol, bool intersection,
-                                   bool selfInter, short offsetMode, short join)
+TopoDS_Shape TopoShape::makeOffsetShape(double offset, double tol, bool intersection,
+                                        bool selfInter, short offsetMode, short join,
+                                        bool fill) const
 {
     BRepOffsetAPI_MakeOffsetShape mkOffset(this->_Shape, offset, tol, BRepOffset_Mode(offsetMode),
         intersection ? Standard_True : Standard_False,
         selfInter ? Standard_True : Standard_False,
         GeomAbs_JoinType(join));
-    return mkOffset.Shape();
+    const TopoDS_Shape& res = mkOffset.Shape();
+    if (!fill)
+        return res;
+#if 1
+    //s=Part.makePlane(10,10)
+    //s.makeOffsetShape(1.0,0.01,False,False,0,0,True)
+    const BRepOffset_MakeOffset& off = mkOffset.MakeOffset();
+    const BRepAlgo_Image& img = off.OffsetEdgesFromShapes();
+
+    // build up map edge->face
+    TopTools_IndexedDataMapOfShapeListOfShape edge2Face;
+    TopExp::MapShapesAndAncestors(this->_Shape, TopAbs_EDGE, TopAbs_FACE, edge2Face);
+    TopTools_IndexedMapOfShape mapOfShape;
+    TopExp::MapShapes(this->_Shape, TopAbs_EDGE, mapOfShape);
+
+    TopoDS_Shell shell;
+    BRep_Builder builder;
+    TopExp_Explorer xp;
+    builder.MakeShell(shell);
+
+    for (xp.Init(this->_Shape,TopAbs_FACE); xp.More(); xp.Next()) {
+        builder.Add(shell, xp.Current());
+    } 
+
+    for (int i=1; i<= edge2Face.Extent(); ++i) {
+        const TopTools_ListOfShape& los = edge2Face.FindFromIndex(i);
+        if (los.Extent() == 1) {
+            // set the index value as user data to use it in accept()
+            const TopoDS_Shape& edge = edge2Face.FindKey(i);
+            Standard_Boolean ok = img.HasImage(edge);
+            if (ok) {
+                const TopTools_ListOfShape& edges = img.Image(edge);
+                TopTools_ListIteratorOfListOfShape it;
+                it.Initialize(edges);
+                BRepOffsetAPI_ThruSections aGenerator (0,0);
+                aGenerator.AddWire(BRepBuilderAPI_MakeWire(TopoDS::Edge(edge)).Wire());
+                aGenerator.AddWire(BRepBuilderAPI_MakeWire(TopoDS::Edge(it.Value())).Wire());
+                aGenerator.Build();
+                for (xp.Init(aGenerator.Shape(),TopAbs_FACE); xp.More(); xp.Next()) {
+                    builder.Add(shell, xp.Current());
+                }
+                //TopoDS_Face face = BRepFill::Face(TopoDS::Edge(edge), TopoDS::Edge(it.Value()));
+                //builder.Add(shell, face);
+            }
+        }
+    }
+
+    for (xp.Init(mkOffset.Shape(),TopAbs_FACE); xp.More(); xp.Next()) {
+        builder.Add(shell, xp.Current());
+    } 
+
+    //BRepBuilderAPI_Sewing sew(offset);
+    //sew.Load(this->_Shape);
+    //sew.Add(mkOffset.Shape());
+    //sew.Perform();
+
+    //shell.Closed(Standard_True);
+
+    return shell;
+#else
+    TopoDS_Solid    Res;
+    TopExp_Explorer exp;
+    BRep_Builder    B;
+    B.MakeSolid(Res);
+
+    BRepTools_Quilt Glue;
+    for (exp.Init(this->_Shape,TopAbs_FACE); exp.More(); exp.Next()) {
+      Glue.Add (exp.Current());
+    } 
+    for (exp.Init(mkOffset.Shape(),TopAbs_FACE);exp.More(); exp.Next()) {
+      Glue.Add (exp.Current().Reversed());
+    }
+    TopoDS_Shape S = Glue.Shells();
+    for (exp.Init(S,TopAbs_SHELL); exp.More(); exp.Next()) {
+      B.Add(Res,exp.Current());
+    }
+    Res.Closed(Standard_True);
+    return Res;
+#endif
+}
+
+TopoDS_Shape TopoShape::makeThickSolid(const TopTools_ListOfShape& remFace,
+                                       double offset, double tol, bool intersection,
+                                       bool selfInter, short offsetMode, short join) const
+{
+    BRepOffsetAPI_MakeThickSolid mkThick(this->_Shape, remFace, offset, tol, BRepOffset_Mode(offsetMode),
+        intersection ? Standard_True : Standard_False,
+        selfInter ? Standard_True : Standard_False,
+        GeomAbs_JoinType(join));
+    return mkThick.Shape();
 }
 
 void TopoShape::transformGeometry(const Base::Matrix4D &rclMat)
@@ -1705,71 +1823,35 @@ void TopoShape::transformGeometry(const Base::Matrix4D &rclMat)
 
 TopoDS_Shape TopoShape::transformGShape(const Base::Matrix4D& rclTrf) const
 {
-    // There is a strange behaviour of the gp_Trsf class if rclTrf has
-    // a negative determinant.
     gp_GTrsf mat;
-    if (rclTrf.determinant() < 0.0) {
-        //mat.SetValues(-rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
-        //              -rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],
-        //              -rclTrf[2][0],rclTrf[2][1],rclTrf[2][2],rclTrf[2][3],
-        //              0.00001,0.00001);
-        mat.SetValue(1,1,-rclTrf[0][0]);
-        mat.SetValue(2,1,-rclTrf[1][0]);
-        mat.SetValue(3,1,-rclTrf[2][0]);
-        mat.SetValue(1,2,rclTrf[0][1]);
-        mat.SetValue(2,2,rclTrf[1][1]);
-        mat.SetValue(3,2,rclTrf[2][1]);
-        mat.SetValue(1,3,rclTrf[0][2]);
-        mat.SetValue(2,3,rclTrf[1][2]);
-        mat.SetValue(3,3,rclTrf[2][2]);
-        mat.SetValue(1,4,rclTrf[0][3]);
-        mat.SetValue(2,4,rclTrf[1][3]);
-        mat.SetValue(3,4,rclTrf[2][3]);
-    }
-    else {
-        //mat.SetValues(rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
-        //              rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],
-        //              rclTrf[2][0],rclTrf[2][1],rclTrf[2][2],rclTrf[2][3],
-        //              0.00001,0.00001);
-        mat.SetValue(1,1,rclTrf[0][0]);
-        mat.SetValue(2,1,rclTrf[1][0]);
-        mat.SetValue(3,1,rclTrf[2][0]);
-        mat.SetValue(1,2,rclTrf[0][1]);
-        mat.SetValue(2,2,rclTrf[1][1]);
-        mat.SetValue(3,2,rclTrf[2][1]);
-        mat.SetValue(1,3,rclTrf[0][2]);
-        mat.SetValue(2,3,rclTrf[1][2]);
-        mat.SetValue(3,3,rclTrf[2][2]);
-        mat.SetValue(1,4,rclTrf[0][3]);
-        mat.SetValue(2,4,rclTrf[1][3]);
-        mat.SetValue(3,4,rclTrf[2][3]);
-    }
+    mat.SetValue(1,1,rclTrf[0][0]);
+    mat.SetValue(2,1,rclTrf[1][0]);
+    mat.SetValue(3,1,rclTrf[2][0]);
+    mat.SetValue(1,2,rclTrf[0][1]);
+    mat.SetValue(2,2,rclTrf[1][1]);
+    mat.SetValue(3,2,rclTrf[2][1]);
+    mat.SetValue(1,3,rclTrf[0][2]);
+    mat.SetValue(2,3,rclTrf[1][2]);
+    mat.SetValue(3,3,rclTrf[2][2]);
+    mat.SetValue(1,4,rclTrf[0][3]);
+    mat.SetValue(2,4,rclTrf[1][3]);
+    mat.SetValue(3,4,rclTrf[2][3]);
 
     // geometric transformation
     BRepBuilderAPI_GTransform mkTrf(this->_Shape, mat);
     return mkTrf.Shape();
 }
 
-void TopoShape::transformShape(const Base::Matrix4D& rclTrf)
+void TopoShape::transformShape(const Base::Matrix4D& rclTrf, bool copy)
 {
-    // There is a strange behaviour of the gp_Trsf class if rclTrf has
-    // a negative determinant.
     gp_Trsf mat;
-    if (rclTrf.determinant() < 0.0) {
-        mat.SetValues(-rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
-                      -rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],
-                      -rclTrf[2][0],rclTrf[2][1],rclTrf[2][2],rclTrf[2][3],
-                      0.00001,0.00001);
-    }
-    else {
-        mat.SetValues(rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
-                      rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],
-                      rclTrf[2][0],rclTrf[2][1],rclTrf[2][2],rclTrf[2][3],
-                      0.00001,0.00001);
-    }
+    mat.SetValues(rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
+                  rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],
+                  rclTrf[2][0],rclTrf[2][1],rclTrf[2][2],rclTrf[2][3],
+                  0.00001,0.00001);
 
     // location transformation
-    BRepBuilderAPI_Transform mkTrf(this->_Shape, mat);
+    BRepBuilderAPI_Transform mkTrf(this->_Shape, mat, copy ? Standard_True : Standard_False);
     this->_Shape = mkTrf.Shape();
 }
 
@@ -1824,7 +1906,7 @@ bool TopoShape::fix(double precision, double mintol, double maxtol)
 
     ShapeFix_Shape fix(this->_Shape);
     fix.SetPrecision(precision);
-    fix.SetMaxTolerance(mintol);
+    fix.SetMinTolerance(mintol);
     fix.SetMaxTolerance(maxtol);
 
     fix.Perform();
@@ -1875,7 +1957,7 @@ TopoDS_Shape TopoShape::removeSplitter() const
 
     if (_Shape.ShapeType() == TopAbs_SOLID) {
         const TopoDS_Solid &solid = TopoDS::Solid(_Shape);
-        BRepTools_ReShape reshape;
+        BRepBuilderAPI_MakeSolid mkSolid;
         TopExp_Explorer it;
         for (it.Init(solid, TopAbs_SHELL); it.More(); it.Next()) {
             const TopoDS_Shell &currentShell = TopoDS::Shell(it.Current());
@@ -1883,7 +1965,10 @@ TopoDS_Shape TopoShape::removeSplitter() const
             if (uniter.process()) {
                 if (uniter.isModified()) {
                     const TopoDS_Shell &newShell = uniter.getShell();
-                    reshape.Replace(currentShell, newShell);
+                    mkSolid.Add(newShell);
+                }
+                else {
+                    mkSolid.Add(currentShell);
                 }
             }
             else {
@@ -1891,7 +1976,7 @@ TopoDS_Shape TopoShape::removeSplitter() const
                 return _Shape;
             }
         }
-        return reshape.Apply(solid);
+        return mkSolid.Solid();
     }
     else if (_Shape.ShapeType() == TopAbs_SHELL) {
         const TopoDS_Shell& shell = TopoDS::Shell(_Shape);

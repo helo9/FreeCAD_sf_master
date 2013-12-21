@@ -38,16 +38,20 @@ set(PartGui_MOC_HDRS
     DlgRevolution.h
     DlgSettings3DViewPartImp.h
     DlgSettingsGeneral.h
+    DlgSettingsObjectColor.h
     TaskFaceColors.h
     TaskShapeBuilder.h
     TaskLoft.h
+    TaskOffset.h
     TaskSweep.h
+    TaskThickness.h
+    TaskDimension.h
     TaskCheckGeometry.h
 )
 fc_wrap_cpp(PartGui_MOC_SRCS ${PartGui_MOC_HDRS})
 SOURCE_GROUP("Moc" FILES ${PartGui_MOC_SRCS})
 
-fc_add_resources(PartGui_QRC_SRCS Resources/Part.qrc)
+qt4_add_resources(PartGui_QRC_SRCS Resources/Part.qrc)
 
 set(PartGui_UIC_SRCS
     CrossSections.ui
@@ -64,15 +68,17 @@ set(PartGui_UIC_SRCS
     DlgRevolution.ui
     DlgSettings3DViewPart.ui
     DlgSettingsGeneral.ui
+    DlgSettingsObjectColor.ui
     TaskFaceColors.ui
     TaskShapeBuilder.ui
     TaskLoft.ui
+    TaskOffset.ui
     TaskSweep.ui
 )
 qt4_wrap_ui(PartGui_UIC_HDRS ${PartGui_UIC_SRCS})
 
 SET(PartGui_SRCS
-#   ${PartGui_QRC_SRCS}
+    ${PartGui_QRC_SRCS}
     ${PartGui_UIC_HDRS}
     AppPartGui.cpp
     Command.cpp
@@ -118,13 +124,20 @@ SET(PartGui_SRCS
     DlgSettingsGeneral.cpp
     DlgSettingsGeneral.h
     DlgSettingsGeneral.ui
+    DlgSettingsObjectColor.cpp
+    DlgSettingsObjectColor.h
+    DlgSettingsObjectColor.ui
     Resources/Part.qrc
     PreCompiled.cpp
     PreCompiled.h
     SoFCShapeObject.cpp
     SoFCShapeObject.h
-    SoBrepShape.cpp
-    SoBrepShape.h
+    SoBrepEdgeSet.cpp
+    SoBrepEdgeSet.h
+    SoBrepFaceSet.cpp
+    SoBrepFaceSet.h
+    SoBrepPointSet.cpp
+    SoBrepPointSet.h
     ViewProvider.cpp
     ViewProvider.h
     ViewProviderExt.cpp
@@ -133,8 +146,36 @@ SET(PartGui_SRCS
     ViewProviderReference.h
     ViewProviderBox.cpp
     ViewProviderBox.h
+    ViewProviderCompound.cpp
+    ViewProviderCompound.h
+    ViewProviderCircleParametric.cpp
+    ViewProviderCircleParametric.h
+    ViewProviderLineParametric.cpp
+    ViewProviderLineParametric.h
+    ViewProviderPointParametric.cpp
+    ViewProviderPointParametric.h
+    ViewProviderEllipseParametric.cpp
+    ViewProviderEllipseParametric.h
+    ViewProviderHelixParametric.cpp
+    ViewProviderHelixParametric.h
+    ViewProviderPlaneParametric.cpp
+    ViewProviderPlaneParametric.h
+    ViewProviderSphereParametric.cpp
+    ViewProviderSphereParametric.h
+    ViewProviderCylinderParametric.cpp
+    ViewProviderCylinderParametric.h
+    ViewProviderConeParametric.cpp
+    ViewProviderConeParametric.h
+    ViewProviderPrism.cpp
+    ViewProviderPrism.h
+    ViewProviderRegularPolygon.cpp
+    ViewProviderRegularPolygon.h
+    ViewProviderTorusParametric.cpp
+    ViewProviderTorusParametric.h
     ViewProviderCurveNet.cpp
     ViewProviderCurveNet.h
+    ViewProviderSpline.cpp
+    ViewProviderSpline.h
     ViewProviderImport.cpp
     ViewProviderImport.h
     ViewProviderExtrusion.cpp
@@ -147,6 +188,8 @@ SET(PartGui_SRCS
     ViewProviderPython.h
     ViewProviderBoolean.cpp
     ViewProviderBoolean.h
+    ViewProviderRuledSurface.cpp
+    ViewProviderRuledSurface.h
     Workbench.cpp
     Workbench.h
     TaskFaceColors.cpp
@@ -158,9 +201,16 @@ SET(PartGui_SRCS
     TaskLoft.cpp
     TaskLoft.h
     TaskLoft.ui
+    TaskOffset.cpp
+    TaskOffset.h
+    TaskOffset.ui
     TaskSweep.cpp
     TaskSweep.h
     TaskSweep.ui
+    TaskThickness.cpp
+    TaskThickness.h
+    TaskDimension.cpp
+    TaskDimension.h
     TaskCheckGeometry.cpp
     TaskCheckGeometry.h
 )

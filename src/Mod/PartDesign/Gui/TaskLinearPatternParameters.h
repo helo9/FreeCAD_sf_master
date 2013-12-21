@@ -31,6 +31,7 @@
 #include "TaskTransformedParameters.h"
 #include "ViewProviderLinearPattern.h"
 
+class QTimer;
 class Ui_TaskLinearPatternParameters;
 
 namespace App {
@@ -56,21 +57,17 @@ public:
     TaskLinearPatternParameters(TaskMultiTransformParameters *parentTask, QLayout *layout);
     virtual ~TaskLinearPatternParameters();
 
-    const std::string getStdDirection(void) const;
     const std::string getDirection(void) const;
     const bool getReverse(void) const;
     const double getLength(void) const;
     const unsigned getOccurrences(void) const;
 
 private Q_SLOTS:
-    void onStdDirection(const std::string& dir);
-    void onButtonX();
-    void onButtonY();
-    void onButtonZ();
+    void onUpdateViewTimer();
+    void onDirectionChanged(int num);
     void onCheckReverse(const bool on);
     void onLength(const double l);
     void onOccurrences(const int n);
-    void onButtonReference(const bool checked);
     virtual void onUpdateView(bool);
 
 protected:
@@ -80,9 +77,11 @@ protected:
 private:
     void setupUI();
     void updateUI();
+    void kickUpdateViewTimer() const;
 
 private:
     Ui_TaskLinearPatternParameters* ui;
+    QTimer* updateViewTimer;
 };
 
 

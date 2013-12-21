@@ -23,9 +23,10 @@
 
 __title__="FreeCAD Arch Component"
 __author__ = "Yorik van Havre"
-__url__ = "http://free-cad.sourceforge.net"
+__url__ = "http://www.freecadweb.org"
 
-import FreeCAD,FreeCADGui
+import FreeCAD,FreeCADGui,Draft
+from FreeCAD import Vector
 from PyQt4 import QtGui,QtCore
 from DraftTools import translate
 
@@ -37,7 +38,7 @@ def addToComponent(compobject,addobject,mod=None):
     to override the default.'''
     import Draft
     if compobject == addobject: return
-    # first check is already there
+    # first check zis already there
     found = False
     attribs = ["Additions","Objects","Components","Subtractions","Base"]
     for a in attribs:
@@ -74,6 +75,7 @@ def addToComponent(compobject,addobject,mod=None):
                     addobject.ViewObject.hide()
                     break
 
+
 def removeFromComponent(compobject,subobject):
     '''removeFromComponent(compobject,subobject): subtracts subobject
     from the given component. If the subobject is already part of the
@@ -81,7 +83,7 @@ def removeFromComponent(compobject,subobject):
     it is added as a subtraction.'''
     if compobject == subobject: return
     found = False
-    attribs = ["Additions","Subtractions","Objects","Components","Base","Axes"]
+    attribs = ["Additions","Subtractions","Objects","Components","Base","Axes","Fixtures"]
     for a in attribs:
         if hasattr(compobject,a):
             if a == "Base":
@@ -101,7 +103,24 @@ def removeFromComponent(compobject,subobject):
             l = compobject.Subtractions
             l.append(subobject)
             compobject.Subtractions = l
-            subobject.ViewObject.hide()
+            if Draft.getType(subobject) != "Window":
+                subobject.ViewObject.hide()
+                
+                
+class SelectionTaskPanel:
+    """A temp taks panel to wait for a selection"""
+    def __init__(self):
+        self.form = QtGui.QLabel()
+        self.form.setText(QtGui.QApplication.translate("Arch", "Please select a base object", None, QtGui.QApplication.UnicodeUTF8))
+        
+    def getStandardButtons(self):
+        return int(QtGui.QDialogButtonBox.Cancel)
+        
+    def reject(self):
+        if hasattr(FreeCAD,"ArchObserver"):
+            FreeCADGui.Selection.removeObserver(FreeCAD.ArchObserver)
+            del FreeCAD.ArchObserver
+        return True
 
             
 class ComponentTaskPanel:
@@ -112,7 +131,7 @@ class ComponentTaskPanel:
         # the categories are shown only if they are not empty.
         
         self.obj = None
-        self.attribs = ["Base","Additions","Subtractions","Objects","Components","Axes"]
+        self.attribs = ["Base","Additions","Subtractions","Objects","Components","Axes","Fixtures","Armatures"]
         self.form = QtGui.QWidget()
         self.form.setObjectName("TaskPanel")
         self.grid = QtGui.QGridLayout(self.form)
@@ -252,19 +271,24 @@ class ComponentTaskPanel:
         self.treeObjects.setText(0,QtGui.QApplication.translate("Arch", "Objects", None, QtGui.QApplication.UnicodeUTF8))
         self.treeAxes.setText(0,QtGui.QApplication.translate("Arch", "Axes", None, QtGui.QApplication.UnicodeUTF8))
         self.treeComponents.setText(0,QtGui.QApplication.translate("Arch", "Components", None, QtGui.QApplication.UnicodeUTF8))        
+        self.treeFixtures.setText(0,QtGui.QApplication.translate("Arch", "Fixtures", None, QtGui.QApplication.UnicodeUTF8))
+        self.treeArmatures.setText(0,QtGui.QApplication.translate("Arch", "Armatures", None, QtGui.QApplication.UnicodeUTF8))
         
 class Component:
     "The default Arch Component object"
     def __init__(self,obj):
-        obj.addProperty("App::PropertyLink","Base","Base",
+        obj.addProperty("App::PropertyLink","Base","Arch",
                         "The base object this component is built upon")
-        obj.addProperty("App::PropertyLinkList","Additions","Base",
+        obj.addProperty("App::PropertyLinkList","Additions","Arch",
                         "Other shapes that are appended to this object")
-        obj.addProperty("App::PropertyLinkList","Subtractions","Base",
+        obj.addProperty("App::PropertyLinkList","Subtractions","Arch",
                         "Other shapes that are subtracted from this object")
         obj.Proxy = self
         self.Type = "Component"
         self.Subvolume = None
+
+    def execute(self,obj):
+        return
 
     def __getstate__(self):
         return self.Type
@@ -272,14 +296,115 @@ class Component:
     def __setstate__(self,state):
         if state:
             self.Type = state
-              
+            
+    def onChanged(self,obj,prop):
+        pass
+        
+    def getSiblings(self,obj):
+        "returns a list of objects with the same base as this object"
+        if not hasattr(obj,"Base"):
+            return []
+        if not obj.Base:
+            return []
+        siblings = []
+        for o in obj.Base.InList:
+            if hasattr(o,"Base"):
+                if o.Base:
+                    if o.Base.Name == obj.Base.Name:
+                        if o.Name != obj.Name:
+                            siblings.append(o)
+        return siblings
+
+    def hideSubobjects(self,obj,prop):
+        "Hides subobjects when a subobject lists change"
+        if prop in ["Additions","Subtractions"]:
+            if hasattr(obj,prop):
+                for o in getattr(obj,prop):
+                    if Draft.getType(o) != "Window":
+                        o.ViewObject.hide()
+
+    def processSubShapes(self,obj,base,pl=None):
+        "Adds additions and subtractions to a base shape"
+        import Draft
+        
+        if pl:
+            if pl.isNull():
+                pl = None
+            else:
+                pl = FreeCAD.Placement(pl)
+                pl = pl.inverse()
+
+        # treat additions
+        for o in obj.Additions:
+            
+            if base:
+                if base.isNull():
+                    base = None
+                    
+            # special case, both walls with coinciding endpoints
+            import ArchWall
+            js = ArchWall.mergeShapes(o,obj)
+            if js:
+                add = js.cut(base)
+                if pl:
+                    add.Placement = add.Placement.multiply(pl)
+                base = base.fuse(add)
+
+            elif (Draft.getType(o) == "Window") or (Draft.isClone(o,"Window")):
+                f = o.Proxy.getSubVolume(o)
+                if f:
+                    if base.Solids and f.Solids:
+                        if pl:
+                            f.Placement = f.Placement.multiply(pl)
+                        base = base.cut(f)
+                        
+            elif o.isDerivedFrom("Part::Feature"):
+                if o.Shape:
+                    if not o.Shape.isNull():
+                        if o.Shape.Solids:
+                            s = o.Shape.copy()
+                            if pl:
+                                s.Placement = s.Placement.multiply(pl)
+                            if base:
+                                if base.Solids:
+                                    base = base.fuse(s)
+                            else:
+                                base = s
+        
+        # treat subtractions
+        for o in obj.Subtractions:
+            
+            if base:
+                if base.isNull():
+                    base = None
+            
+            if base:
+                if (Draft.getType(o) == "Window") or (Draft.isClone(o,"Window")):
+                        # windows can be additions or subtractions, treated the same way
+                        f = o.Proxy.getSubVolume(o)
+                        if f:
+                            if base.Solids and f.Solids:
+                                if pl:
+                                    f.Placement = f.Placement.multiply(pl)
+                                base = base.cut(f)
+                            
+                elif o.isDerivedFrom("Part::Feature"):
+                    if o.Shape:
+                        if not o.Shape.isNull():
+                            if o.Shape.Solids and base.Solids:
+                                    s = o.Shape.copy()
+                                    if pl:
+                                        s.Placement = s.Placement.multiply(pl)
+                                    base = base.cut(s)
+        return base
+
 class ViewProviderComponent:
     "A default View Provider for Component objects"
     def __init__(self,vobj):
         vobj.Proxy = self
         self.Object = vobj.Object
         
-    def updateData(self,vobj,prop):
+    def updateData(self,obj,prop):
         return
 
     def onChanged(self,vobj,prop):
@@ -290,11 +415,22 @@ class ViewProviderComponent:
         return
 
     def getDisplayModes(self,vobj):
-        modes=[]
+        modes=["Detailed"]
         return modes
 
     def setDisplayMode(self,mode):
-        return mode
+        if mode == "Detailed":
+            if hasattr(self,"Object"):
+                if hasattr(self.Object,"Fixtures"):
+                    for f in self.Object.Fixtures:
+                        f.ViewObject.show()
+            return "Flat Lines"
+        else:
+            if hasattr(self,"Object"):
+                if hasattr(self.Object,"Fixtures"):
+                    for f in self.Object.Fixtures:
+                        f.ViewObject.hide()
+            return mode
 
     def __getstate__(self):
         return None
@@ -303,7 +439,23 @@ class ViewProviderComponent:
         return None
 
     def claimChildren(self):
-        return [self.Object.Base]+self.Object.Additions+self.Object.Subtractions
+        if hasattr(self,"Object"):
+            if Draft.getType(self.Object) != "Wall":
+                c = [self.Object.Base]
+            elif Draft.getType(self.Object.Base) == "Space":
+                c = []
+            else:
+                c = [self.Object.Base]
+            c = c + self.Object.Additions + self.Object.Subtractions
+            if hasattr(self.Object,"Fixtures"):
+                c.extend(self.Object.Fixtures)
+            if hasattr(self.Object,"Armatures"):
+                c.extend(self.Object.Armatures)
+            if hasattr(self.Object,"Tool"):
+                if self.Object.Tool:
+                    c.append(self.Object.Tool)
+            return c
+        return []
 
     def setEdit(self,vobj,mode):
         taskd = ComponentTaskPanel()
@@ -317,23 +469,38 @@ class ViewProviderComponent:
         return False
 
 class ArchSelectionObserver:
-    def __init__(self,origin,watched,hide=True,nextCommand=None):
+    """ArchSelectionObserver([origin,watched,hide,nextCommand]): The ArchSelectionObserver 
+    object can be added as a selection observer to the FreeCAD Gui. If watched is given (a
+    document object), the observer will be triggered only when that object is selected/unselected.
+    If hide is True, the watched object will be hidden. If origin is given (a document
+    object), that object will have its visibility/selectability restored. If nextCommand
+    is given (a FreeCAD command), it will be executed on leave."""
+    
+    def __init__(self,origin=None,watched=None,hide=True,nextCommand=None):
         self.origin = origin
         self.watched = watched
         self.hide = hide
         self.nextCommand = nextCommand
+        
     def addSelection(self,document, object, element, position):
-        if object == self.watched.Name:
+        if not self.watched:
+            FreeCADGui.Selection.removeObserver(FreeCAD.ArchObserver)
+            if self.nextCommand:
+                FreeCADGui.runCommand(self.nextCommand)
+            del FreeCAD.ArchObserver
+        elif object == self.watched.Name:
             if not element:
                 FreeCAD.Console.PrintMessage(str(translate("Arch","closing Sketch edit")))
                 if self.hide:
-                    self.origin.ViewObject.Transparency = 0
-                    self.origin.ViewObject.Selectable = True
+                    if self.origin:
+                        self.origin.ViewObject.Transparency = 0
+                        self.origin.ViewObject.Selectable = True
                     self.watched.ViewObject.hide()
                 FreeCADGui.activateWorkbench("ArchWorkbench")
-                FreeCADGui.Selection.removeObserver(FreeCAD.ArchObserver)
+                if hasattr(FreeCAD,"ArchObserver"):
+                    FreeCADGui.Selection.removeObserver(FreeCAD.ArchObserver)
+                    del FreeCAD.ArchObserver
                 if self.nextCommand:
                     FreeCADGui.Selection.clearSelection()
                     FreeCADGui.Selection.addSelection(self.watched)
                     FreeCADGui.runCommand(self.nextCommand)
-                del FreeCAD.ArchObserver

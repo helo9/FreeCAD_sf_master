@@ -102,6 +102,12 @@ int Transaction::getPos(void) const
     return iPos;
 }
 
+bool Transaction::hasObject(DocumentObject *Obj) const
+{
+    std::map<const DocumentObject*,TransactionObject*>::const_iterator it;
+    it = _Objects.find(Obj);
+    return (it != _Objects.end());
+}
 
 //**************************************************************************
 // separator for other implemetation aspects
@@ -234,13 +240,16 @@ void TransactionObject::applyChn(Document & /*Doc*/, DocumentObject * /*pcObj*/,
 {
     if (status == New || status == Chn) {
         // apply changes if any
-        if(!Forward){
+        if (!Forward) {
             std::map<const Property*,Property*>::const_reverse_iterator It;
-            for (It=_PropChangeMap.rbegin();It!=_PropChangeMap.rend();++It)
+            std::map<const Property*,Property*>::const_reverse_iterator rendIt = _PropChangeMap.rend();
+            for (It = _PropChangeMap.rbegin(); It != rendIt; ++It)
                 const_cast<Property*>(It->first)->Paste(*(It->second));
-        }else{
+        }
+        else {
             std::map<const Property*,Property*>::const_iterator It;
-            for (It=_PropChangeMap.begin();It!=_PropChangeMap.end();++It)
+            std::map<const Property*,Property*>::const_iterator endIt = _PropChangeMap.end();
+            for (It = _PropChangeMap.begin(); It != endIt; ++It)
                 const_cast<Property*>(It->first)->Paste(*(It->second));
         }
     }

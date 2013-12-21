@@ -24,6 +24,8 @@
 #include "PreCompiled.h"
 #ifndef _PreComp_
 # include <BRep_Builder.hxx>
+# include <Precision.hxx>
+# include <ShapeFix_Wire.hxx>
 # include <TopoDS_Compound.hxx>
 #endif
 
@@ -105,7 +107,7 @@ int Sketch::setUpSketch(const std::vector<Part::Geometry *> &GeoList,
     std::vector<Part::Geometry *> intGeoList, extGeoList;
     for (int i=0; i < int(GeoList.size())-extGeoCount; i++)
         intGeoList.push_back(GeoList[i]);
-    for (int i=int(GeoList.size())-extGeoCount; i < GeoList.size(); i++)
+    for (int i=int(GeoList.size())-extGeoCount; i < int(GeoList.size()); i++)
         extGeoList.push_back(GeoList[i]);
 
     addGeometry(intGeoList);
@@ -537,8 +539,13 @@ int Sketch::addConstraint(const Constraint *constraint)
         rtn = addEqualConstraint(constraint->First,constraint->Second);
         break;
     case Symmetric:
-        rtn = addSymmetricConstraint(constraint->First,constraint->FirstPos,
-                                     constraint->Second,constraint->SecondPos,constraint->Third);
+        if (constraint->ThirdPos != none)
+            rtn = addSymmetricConstraint(constraint->First,constraint->FirstPos,
+                                         constraint->Second,constraint->SecondPos,
+                                         constraint->Third,constraint->ThirdPos);
+        else
+            rtn = addSymmetricConstraint(constraint->First,constraint->FirstPos,
+                                         constraint->Second,constraint->SecondPos,constraint->Third);
         break;
     case None:
         break;
@@ -1522,6 +1529,30 @@ int Sketch::addSymmetricConstraint(int geoId1, PointPos pos1, int geoId2, PointP
     return -1;
 }
 
+int Sketch::addSymmetricConstraint(int geoId1, PointPos pos1, int geoId2, PointPos pos2,
+                                   int geoId3, PointPos pos3)
+{
+    geoId1 = checkGeoId(geoId1);
+    geoId2 = checkGeoId(geoId2);
+    geoId3 = checkGeoId(geoId3);
+
+    int pointId1 = getPointId(geoId1, pos1);
+    int pointId2 = getPointId(geoId2, pos2);
+    int pointId3 = getPointId(geoId3, pos3);
+
+    if (pointId1 >= 0 && pointId1 < int(Points.size()) &&
+        pointId2 >= 0 && pointId2 < int(Points.size()) &&
+        pointId3 >= 0 && pointId3 < int(Points.size())) {
+        GCS::Point &p1 = Points[pointId1];
+        GCS::Point &p2 = Points[pointId2];
+        GCS::Point &p = Points[pointId3];
+        int tag = ++ConstraintsCounter;
+        GCSsys.addConstraintP2PSymmetric(p1, p2, p, tag);
+        return ConstraintsCounter;
+    }
+    return -1;
+}
+
 bool Sketch::updateGeometry()
 {
     int i=0;
@@ -1642,7 +1673,7 @@ int Sketch::solve(void)
 
             if (soltype > 0) {
                 Base::Console().Log("If you see this message please report a way of reproducing this result at\n");
-                Base::Console().Log("https://sourceforge.net/apps/mantisbt/free-cad/main_page.php\n");
+                Base::Console().Log("http://www.freecadweb.org/tracker/main_page.php\n");
             }
 
             break;
@@ -1893,6 +1924,8 @@ TopoShape Sketch::toShape(void) const
         }
     }
 
+    // FIXME: Use ShapeAnalysis_FreeBounds::ConnectEdgesToWires() as an alternative
+    //
     // sort them together to wires
     while (edge_list.size() > 0) {
         BRepBuilderAPI_MakeWire mkWire;
@@ -1918,7 +1951,15 @@ TopoShape Sketch::toShape(void) const
             }
         }
         while (found);
-        wires.push_back(new_wire);
+
+        // Fix any topological issues of the wire
+        ShapeFix_Wire aFix;
+        aFix.SetPrecision(Precision::Confusion());
+        aFix.Load(new_wire);
+        aFix.FixReorder();
+        aFix.FixConnected();
+        aFix.FixClosed();
+        wires.push_back(aFix.Wire());
     }
     if (wires.size() == 1)
         result = *wires.begin();

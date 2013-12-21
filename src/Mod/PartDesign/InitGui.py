@@ -1,4 +1,4 @@
-# PartDesign gui init module  
+# PartDesign gui init module
 # (c) 2003 Juergen Riegel
 #
 # Gathering all the information to start FreeCAD
@@ -11,7 +11,7 @@
 #*   This file is part of the FreeCAD CAx development system.              *
 #*                                                                         *
 #*   This program is free software; you can redistribute it and/or modify  *
-#*   it under the terms of the GNU General Public License (GPL)            *
+#*   it under the terms of the GNU Lesser General Public License (LGPL)    *
 #*   as published by the Free Software Foundation; either version 2 of     *
 #*   the License, or (at your option) any later version.                   *
 #*   for detail see the LICENCE text file.                                 *
@@ -19,7 +19,7 @@
 #*   FreeCAD is distributed in the hope that it will be useful,            *
 #*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
 #*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-#*   GNU Library General Public License for more details.                  *
+#*   GNU Lesser General Public License for more details.                   *
 #*                                                                         *
 #*   You should have received a copy of the GNU Library General Public     *
 #*   License along with FreeCAD; if not, write to the Free Software        *
@@ -29,11 +29,9 @@
 #*   Juergen Riegel 2002                                                   *
 #***************************************************************************/
 
-
-
 class PartDesignWorkbench ( Workbench ):
-	"PartDesign workbench object"
-	Icon = """
+        "PartDesign workbench object"
+        Icon = """
                 /* XPM */
                 static char * partdesign_xpm[] = {
                 "16 16 9 1",
@@ -62,15 +60,19 @@ class PartDesignWorkbench ( Workbench ):
                 ".+@@@####@.@..  ",
                 " ......+++..    ",
                 "        ...     "};
-			"""
+                        """
         MenuText = "Part Design"
         ToolTip = "Part Design workbench"
 
-	def Initialize(self):
-		# load the module
-		import PartDesignGui
-		import PartDesign
-	def GetClassName(self):
-		return "PartDesignGui::Workbench"
+        def Initialize(self):
+                # load the module
+                try:
+                    from WizardShaft import WizardShaft
+                except:
+                    print "Wizard shaft not installed"
+                import PartDesignGui
+                import PartDesign
+        def GetClassName(self):
+                return "PartDesignGui::Workbench"
 
 Gui.addWorkbench(PartDesignWorkbench())

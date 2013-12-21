@@ -31,13 +31,11 @@
 #include <App/DynamicProperty.h>
 #include <App/PropertyPythonObject.h>
 #include <App/PropertyGeo.h>
-#include <App/FeaturePythonPy.h>
 
 namespace App
 {
 
 class Property;
-class FeaturePythonPy;
 
 // Helper class to hide implementation details
 class AppExport FeaturePythonImp
@@ -48,6 +46,7 @@ public:
 
     DocumentObjectExecReturn *execute();
     void onChanged(const Property* prop);
+    PyObject *getPyObject(void);
 
 private:
     App::DocumentObject* object;
@@ -99,6 +98,9 @@ public:
         const char* group=0, const char* doc=0,
         short attr=0, bool ro=false, bool hidden=false) {
         return props->addDynamicProperty(type, name, group, doc, attr, ro, hidden);
+    }
+    virtual bool removeDynamicProperty(const char* name) {
+        return props->removeDynamicProperty(name);
     }
     std::vector<std::string> getDynamicPropertyNames() const {
         return props->getDynamicPropertyNames();
@@ -185,7 +187,7 @@ public:
     PyObject *getPyObject(void) {
         if (FeatureT::PythonObject.is(Py::_None())) {
             // ref counter is set to 1
-            FeatureT::PythonObject = Py::Object(new FeaturePythonPy(this),true);
+            FeatureT::PythonObject = Py::Object(imp->getPyObject(),true);
         }
         return Py::new_reference_to(FeatureT::PythonObject);
     }
@@ -195,8 +197,6 @@ public:
         else
             FeatureT::PythonObject = Py::None();
     }
-
-    friend class FeaturePythonPy;
 
 protected:
     virtual void onChanged(const Property* prop) {

@@ -41,6 +41,7 @@
 #include <App/Document.h>
 #include <App/DocumentObject.h>
 #include <App/DocumentPy.h>
+#include <App/DocumentObjectPy.h>
 #include <Gui/BitmapFactory.h>
 #include <Gui/Document.h>
 #include <Gui/DocumentPy.h>
@@ -232,8 +233,19 @@ QMap<QString, CallTip> CallTipsList::extractTips(const QString& context) const
         Py::Object type(PyObject_Type(obj.ptr()), true);
         Py::Object inst = obj; // the object instance 
         union PyType_Object typeobj = {&Base::PyObjectBase::Type};
-        bool subclass = (PyObject_IsSubclass(type.ptr(), typeobj.o) == 1);
-        if (subclass) obj = type;
+        union PyType_Object typedoc = {&App::DocumentObjectPy::Type};
+        if (PyObject_IsSubclass(type.ptr(), typedoc.o) == 1) {
+            // From the template Python object we don't query its type object because there we keep
+            // a list of additional methods that we won't see otherwise. But to get the correct doc
+            // strings we query the type's dict in the class itself.
+            // To see if we have a template Python object we check for the existence of supportedProperties
+            if (!type.hasAttr("supportedProperties")) {
+                obj = type;
+            }
+        }
+        else if (PyObject_IsSubclass(type.ptr(), typeobj.o) == 1) {
+            obj = type;
+        }
         
         // If we have an instance of PyObjectBase then determine whether it's valid or not
         if (PyObject_IsInstance(inst.ptr(), typeobj.o) == 1) {
@@ -405,11 +417,11 @@ void CallTipsList::extractTipsFromProperties(Py::Object& obj, QMap<QString, Call
 void CallTipsList::showTips(const QString& line)
 {
     // search only once
-    static QPixmap type_module_icon = BitmapFactory().pixmap("ClassBrowser/type_module");
-    static QPixmap type_class_icon = BitmapFactory().pixmap("ClassBrowser/type_class");
-    static QPixmap method_icon = BitmapFactory().pixmap("ClassBrowser/method");
-    static QPixmap member_icon = BitmapFactory().pixmap("ClassBrowser/member");
-    static QPixmap property_icon = BitmapFactory().pixmap("ClassBrowser/property");
+    static QPixmap type_module_icon = BitmapFactory().pixmap("ClassBrowser/type_module.svg");
+    static QPixmap type_class_icon = BitmapFactory().pixmap("ClassBrowser/type_class.svg");
+    static QPixmap method_icon = BitmapFactory().pixmap("ClassBrowser/method.svg");
+    static QPixmap member_icon = BitmapFactory().pixmap("ClassBrowser/member.svg");
+    static QPixmap property_icon = BitmapFactory().pixmap("ClassBrowser/property.svg");
 
     // object is in error state
     static const char * const forbidden_xpm[]={

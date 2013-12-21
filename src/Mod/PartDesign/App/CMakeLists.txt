@@ -11,11 +11,13 @@ include_directories(
     ${ZLIB_INCLUDE_DIR}
     ${PYTHON_INCLUDE_PATH}
     ${XERCESC_INCLUDE_DIR}
+    ${QT_INCLUDE_DIR}
 )
 link_directories(${OCC_LIBRARY_DIR})
 
 set(PartDesign_LIBS
     ${OCC_LIBRARIES}
+    ${OCC_DEBUG_LIBRARIES}
     Part
     FreeCADApp
 )
@@ -51,6 +53,8 @@ SET(FeaturesDressUp_SRCS
     FeatureFillet.h
     FeatureChamfer.cpp
     FeatureChamfer.h
+    FeatureDraft.cpp
+    FeatureDraft.h
 )
 SOURCE_GROUP("DressUpFeatures" FILES ${FeaturesDressUp_SRCS})
 

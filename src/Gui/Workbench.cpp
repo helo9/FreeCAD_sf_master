@@ -399,7 +399,11 @@ void StdWorkbench::setupContextMenu(const char* recipient, MenuItem* item) const
                   << "Std_ViewRear" << "Std_ViewBottom" << "Std_ViewLeft"
                   << "Separator" << "Std_ViewRotateLeft" << "Std_ViewRotateRight";
 
-        *item << "Std_ViewFitAll" << "Std_ViewFitSelection" << StdViews
+	MenuItem *measure = new MenuItem();
+	measure->setCommand("Measure");
+	*measure << "View_Measure_Toggle_All" << "View_Measure_Clear_All";
+
+        *item << "Std_ViewFitAll" << "Std_ViewFitSelection" << StdViews  << measure
               << "Separator" << "Std_ViewDockUndockFullscreen";
 
         if (Gui::Selection().countObjectsOfType(App::DocumentObject::getClassTypeId()) > 0 )
@@ -442,16 +446,16 @@ MenuItem* StdWorkbench::setupMenuBar() const
     *edit << "Std_Undo" << "Std_Redo" << "Separator" << "Std_Cut" << "Std_Copy"
           << "Std_Paste" << "Std_DuplicateSelection" << "Separator"
           << "Std_Refresh" << "Std_BoxSelection" << "Std_SelectAll" << "Std_Delete"
-          << "Std_Placement" << "Std_Alignment"
+          << "Separator" << "Std_Placement" /*<< "Std_TransformManip"*/ << "Std_Alignment"
           << "Std_Edit" << "Separator" << "Std_DlgPreferences";
 
     // Standard views
     MenuItem* stdviews = new MenuItem;
     stdviews->setCommand("Standard views");
     *stdviews << "Std_ViewFitAll" << "Std_ViewFitSelection" << "Std_ViewAxo"
-              << "Separator" << "Std_ViewFront" << "Std_ViewRight"
-              << "Std_ViewTop" << "Separator" << "Std_ViewRear" 
-              << "Std_ViewLeft" << "Std_ViewBottom"
+              << "Separator" << "Std_ViewFront" << "Std_ViewTop"
+              << "Std_ViewRight" << "Separator" << "Std_ViewRear"
+              << "Std_ViewBottom" << "Std_ViewLeft"
               << "Separator" << "Std_ViewRotateLeft" << "Std_ViewRotateRight";
 
     // stereo
@@ -471,7 +475,8 @@ MenuItem* StdWorkbench::setupMenuBar() const
     visu->setCommand("Visibility");
     *visu << "Std_ToggleVisibility" << "Std_ShowSelection" << "Std_HideSelection"
           << "Separator" << "Std_ToggleObjects" << "Std_ShowObjects" << "Std_HideObjects" 
-          << "Separator" << "Std_ToggleSelectability";
+          << "Separator" << "Std_ToggleSelectability"
+          << "Separator" << "View_Measure_Toggle_All" << "View_Measure_Clear_All";
 
     // View
     MenuItem* view = new MenuItem( menuBar );
@@ -492,14 +497,15 @@ MenuItem* StdWorkbench::setupMenuBar() const
     *tool << "Std_DlgParameter" << "Separator"
           << "Std_ViewScreenShot" << "Std_SceneInspector" 
           << "Std_ExportGraphviz" << "Std_ProjectUtil"
-          << "Std_DemoMode" << "Separator" << "Std_DlgCustomize";
+          << "Std_DemoMode" << "Std_UnitsCalculator" << "Separator" << "Std_DlgCustomize";
 
     // Macro
     MenuItem* macro = new MenuItem( menuBar );
     macro->setCommand("&Macro");
     *macro << "Std_DlgMacroRecord" << "Std_MacroStopRecord" << "Std_DlgMacroExecute"
            << "Separator" << "Std_DlgMacroExecuteDirect" << "Std_MacroStartDebug"
-           << "Std_MacroStopDebug" << "Std_MacroStepOver" << "Std_ToggleBreakpoint";
+           << "Std_MacroStopDebug" << "Std_MacroStepOver" << "Std_MacroStepInto"
+           << "Std_ToggleBreakpoint";
 
     // Windows
     MenuItem* wnd = new MenuItem( menuBar );
@@ -513,15 +519,12 @@ MenuItem* StdWorkbench::setupMenuBar() const
     sep->setCommand( "Separator" );
 
     // Help
-    MenuItem* helpWebsites = new MenuItem;
-    helpWebsites->setCommand("&On-line help");
-    *helpWebsites << "Std_OnlineHelpWebsite" << "Std_FreeCADWebsite" << "Std_PythonWebsite";
-    
     MenuItem* help = new MenuItem( menuBar );
     help->setCommand("&Help");
-    *help << "Std_OnlineHelp" << "Std_PythonHelp"
-          << helpWebsites  << "Separator" << "Std_About"
-          << "Std_AboutQt" << "Separator" << "Std_WhatsThis";
+    *help << "Std_OnlineHelp" << "Std_FreeCADWebsite"
+          << "Std_FreeCADUserHub" << "Std_FreeCADPowerUserHub"
+          << "Std_PythonHelp" << "Std_FreeCADForum"
+          << "Std_FreeCADFAQ" << "Std_About" << "Std_WhatsThis";
 
     return menuBar;
 }
@@ -546,9 +549,9 @@ ToolBarItem* StdWorkbench::setupToolBars() const
     // View
     ToolBarItem* view = new ToolBarItem( root );
     view->setCommand("View");
-    *view << "Std_ViewFitAll" << "Separator" << "Std_ViewAxo" << "Separator" << "Std_ViewFront" 
-          << "Std_ViewRight" << "Std_ViewTop" << "Separator" << "Std_ViewRear" << "Std_ViewLeft" 
-          << "Std_ViewBottom" << "Separator" << "Std_MeasureDistance" ;
+    *view << "Std_ViewFitAll" << "Separator" << "Std_ViewAxo" << "Separator" << "Std_ViewFront"
+          << "Std_ViewTop" << "Std_ViewRight" << "Separator" << "Std_ViewRear" << "Std_ViewBottom"
+          << "Std_ViewLeft" << "Separator" << "Std_MeasureDistance" ;
 
     return root;
 }

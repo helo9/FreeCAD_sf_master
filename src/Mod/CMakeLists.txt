@@ -8,6 +8,7 @@ add_subdirectory(Image)
 add_subdirectory(Mesh)
 
 add_subdirectory(Part)
+add_subdirectory(Material)
 add_subdirectory(PartDesign)
 add_subdirectory(Raytracing)
 add_subdirectory(Drawing)
@@ -18,7 +19,6 @@ ELSE(EIGEN3_FOUND)
     MESSAGE("Due to the missing Eigen3 library the Sketcher module won't be built")
     MESSAGE("Due to the missing Eigen3 library the Robot module won't be built")
 ENDIF(EIGEN3_FOUND)
-add_subdirectory(Machining_Distortion)
 
 add_subdirectory(ReverseEngineering)
 add_subdirectory(MeshPart)
@@ -37,15 +37,20 @@ add_subdirectory(Assembly)
 if(FREECAD_BUILD_CAM)
     add_subdirectory(Cam)
 endif(FREECAD_BUILD_CAM)
-if(FREECAD_BUILD_FEM)
+#if(FREECAD_BUILD_FEM)
     add_subdirectory(Fem)
-endif(FREECAD_BUILD_FEM)
+#	MESSAGE("Build FEM")
+#endif(FREECAD_BUILD_FEM)
 if(FREECAD_BUILD_SANDBOX)
     add_subdirectory(Sandbox)
 endif(FREECAD_BUILD_SANDBOX)
 
-add_subdirectory(Surfaces)
 add_subdirectory(Ship)
 add_subdirectory(OpenSCAD)
+
+add_subdirectory(Plot)
+
+add_subdirectory(Spreadsheet)
+
 
 

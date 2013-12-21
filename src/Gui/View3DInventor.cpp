@@ -27,6 +27,7 @@
 # include <QAction>
 # include <QApplication>
 # include <QFileInfo>
+# include <QGLFramebufferObject>
 # include <QKeyEvent>
 # include <QEvent>
 # include <QDropEvent>
@@ -52,6 +53,7 @@
 # include <Inventor/events/SoEvent.h>
 # include <Inventor/fields/SoSFString.h>
 # include <Inventor/fields/SoSFColor.h>
+# include <Inventor/Qt/SoQtBasic.h>
 #endif
 # include <QStackedWidget>
 
@@ -112,11 +114,19 @@ View3DInventor::View3DInventor(Gui::Document* pcDocument, QWidget* parent, Qt::W
 
     // create the inventor widget and set the defaults
 #if !defined (NO_USE_QT_MDI_AREA)
+#if SOQT_MAJOR_VERSION > 1 || (SOQT_MAJOR_VERSION == 1 && SOQT_MINOR_VERSION >= 5)
+    // #0000282: Window gets smaller on loading files
+    // #0001028: Main window resized when a document is opened
+    _viewer = new View3DInventorViewer(this);
+#else
     _viewer = new View3DInventorViewer(0);
+#endif
+    _viewer->setDocument(this->_pcDocument);
     stack->addWidget(_viewer->getWidget());
     setCentralWidget(stack);
 #else
     _viewer = new View3DInventorViewer(this);
+    _viewer->setDocument(this->_pcDocument);
 #endif
     // apply the user settings
     OnChange(*hGrp,"EyeDistance");
@@ -142,6 +152,9 @@ View3DInventor::View3DInventor(Gui::Document* pcDocument, QWidget* parent, Qt::W
     OnChange(*hGrp,"OrbitStyle");
     OnChange(*hGrp,"Sensitivity");
     OnChange(*hGrp,"ResetCursorPosition");
+    OnChange(*hGrp,"DimensionsVisible");
+    OnChange(*hGrp,"Dimensions3dVisible");
+    OnChange(*hGrp,"DimensionsDeltaVisible");
 
     stopSpinTimer = new QTimer(this);
     connect(stopSpinTimer, SIGNAL(timeout()), this, SLOT(stopAnimating()));
@@ -175,6 +188,12 @@ View3DInventor::~View3DInventor()
 
     // here is from time to time trouble!!!
     delete _viewer;
+}
+
+void View3DInventor::deleteSelf()
+{
+    _viewer->setDocument(0);
+    MDIView::deleteSelf();
 }
 
 PyObject *View3DInventor::getPyObject(void)
@@ -292,12 +311,12 @@ void View3DInventor::OnChange(ParameterGrp::SubjectType &rCaller,ParameterGrp::M
         bool on = rGrp.GetBool("ZoomAtCursor", false);
         _viewer->navigationStyle()->setZoomAtCursor(on);
     }
-    else if (strcmp(Reason,"ZoomSetp") == 0) {
-        float val = rGrp.GetFloat("ZoomSetp", 0.0f);
+    else if (strcmp(Reason,"ZoomStep") == 0) {
+        float val = rGrp.GetFloat("ZoomStep", 0.0f);
         _viewer->navigationStyle()->setZoomStep(val);
     }
     else if (strcmp(Reason,"EyeDistance") == 0) {
-        _viewer->setStereoOffset(rGrp.GetFloat("EyeDistance",65.0));
+        _viewer->setStereoOffset(rGrp.GetFloat("EyeDistance",5.0));
     }
     else if (strcmp(Reason,"CornerCoordSystem") == 0) {
         _viewer->setFeedbackVisibility(rGrp.GetBool("CornerCoordSystem",true));
@@ -306,7 +325,7 @@ void View3DInventor::OnChange(ParameterGrp::SubjectType &rCaller,ParameterGrp::M
         _viewer->setAnimationEnabled(rGrp.GetBool("UseAutoRotation",true));
     }
     else if (strcmp(Reason,"Gradient") == 0) {
-        _viewer->setGradientBackgroud((rGrp.GetBool("Gradient",true)));
+        _viewer->setGradientBackground((rGrp.GetBool("Gradient",true)));
     }
     else if (strcmp(Reason,"UseAntialiasing") == 0) {
         _viewer->getGLRenderAction()->setSmoothing(rGrp.GetBool("UseAntialiasing",false));
@@ -344,7 +363,28 @@ void View3DInventor::OnChange(ParameterGrp::SubjectType &rCaller,ParameterGrp::M
         else
             _viewer->setCameraType(SoPerspectiveCamera::getClassTypeId());
     }
-    else {
+    else if (strcmp(Reason, "DimensionsVisible") == 0)
+    {
+      if (rGrp.GetBool("DimensionsVisible", true))
+	_viewer->turnAllDimensionsOn();
+      else
+	_viewer->turnAllDimensionsOff();
+    }
+    else if (strcmp(Reason, "Dimensions3dVisible") == 0)
+    {
+      if (rGrp.GetBool("Dimensions3dVisible", true))
+	_viewer->turn3dDimensionsOn();
+      else
+	_viewer->turn3dDimensionsOff();
+    }
+    else if (strcmp(Reason, "DimensionsDeltaVisible") == 0)
+    {
+      if (rGrp.GetBool("DimensionsDeltaVisible", true))
+	_viewer->turnDeltaDimensionsOn();
+      else
+	_viewer->turnDeltaDimensionsOff();
+    }
+    else{
         unsigned long col1 = rGrp.GetUnsigned("BackgroundColor",3940932863UL);
         unsigned long col2 = rGrp.GetUnsigned("BackgroundColor2",859006463UL); // default color (dark blue)
         unsigned long col3 = rGrp.GetUnsigned("BackgroundColor3",2880160255UL); // default color (blue/grey)
@@ -356,9 +396,9 @@ void View3DInventor::OnChange(ParameterGrp::SubjectType &rCaller,ParameterGrp::M
         r4 = ((col4 >> 24) & 0xff) / 255.0; g4 = ((col4 >> 16) & 0xff) / 255.0; b4 = ((col4 >> 8) & 0xff) / 255.0;
         _viewer->setBackgroundColor(SbColor(r1, g1, b1));
         if (rGrp.GetBool("UseBackgroundColorMid",false) == false)
-            _viewer->setGradientBackgroudColor(SbColor(r2, g2, b2), SbColor(r3, g3, b3));
+            _viewer->setGradientBackgroundColor(SbColor(r2, g2, b2), SbColor(r3, g3, b3));
         else
-            _viewer->setGradientBackgroudColor(SbColor(r2, g2, b2), SbColor(r3, g3, b3), SbColor(r4, g4, b4));
+            _viewer->setGradientBackgroundColor(SbColor(r2, g2, b2), SbColor(r3, g3, b3), SbColor(r4, g4, b4));
     }
 }
 
@@ -482,10 +522,36 @@ void View3DInventor::print(QPrinter* printer)
     QImage img;
     QPainter p(printer);
     QRect rect = printer->pageRect();
-    _viewer->savePicture(rect.width(), rect.height(), View3DInventorViewer::White, img);
+
+    if (App::GetApplication().GetParameterGroupByPath
+        ("User parameter:BaseApp/Preferences/Document")->GetBool("DisablePBuffers",false)) {
+        previewFromFramebuffer(rect, img);
+    }
+    else {
+        try {
+            _viewer->savePicture(rect.width(), rect.height(), View3DInventorViewer::White, img);
+        }
+        catch (...) {
+            previewFromFramebuffer(rect, img);
+        }
+    }
+
     p.drawImage(0,0,img);
     p.end();
 #endif
+}
+
+void View3DInventor::previewFromFramebuffer(const QRect& rect, QImage& img)
+{
+    QGLFramebufferObject fbo(rect.width(), rect.height(), QGLFramebufferObject::Depth);
+    const SbColor col = _viewer->getBackgroundColor();
+    bool on = _viewer->hasGradientBackground();
+    _viewer->setBackgroundColor(SbColor(1.0f,1.0f,1.0f));
+    _viewer->setGradientBackground(false);
+    _viewer->renderToFramebuffer(&fbo);
+    _viewer->setBackgroundColor(col);
+    _viewer->setGradientBackground(on);
+    img = fbo.toImage();
 }
 
 // **********************************************************************************
@@ -647,10 +713,14 @@ bool View3DInventor::onHasMsg(const char* pMsg) const
         return true;
     else if (strcmp("SaveAs",pMsg) == 0)
         return true;
-    else if (strcmp("Undo",pMsg) == 0)
-        return getAppDocument()->getAvailableUndos() > 0;
-    else if (strcmp("Redo",pMsg) == 0)
-        return getAppDocument()->getAvailableRedos() > 0; 
+    else if (strcmp("Undo",pMsg) == 0) {
+        App::Document* doc = getAppDocument();
+        return doc && doc->getAvailableUndos() > 0;
+    }
+    else if (strcmp("Redo",pMsg) == 0) {
+        App::Document* doc = getAppDocument();
+        return doc && doc->getAvailableRedos() > 0;
+    }
     else if (strcmp("Print",pMsg) == 0)
         return true; 
     else if (strcmp("PrintPreview",pMsg) == 0)
@@ -771,12 +841,9 @@ bool View3DInventor::hasClippingPlane() const
     return _viewer->hasClippingPlane();
 }
 
-void View3DInventor::setOverlayWidget(GLOverlayWidget* widget)
+void View3DInventor::setOverlayWidget(QWidget* widget)
 {
     removeOverlayWidget();
-    QGLWidget* w = static_cast<QGLWidget*>(_viewer->getGLWidget());
-    QImage img = w->grabFrameBuffer();
-    widget->setImage(img);
     stack->addWidget(widget);
     stack->setCurrentIndex(1);
 }
@@ -788,14 +855,14 @@ void View3DInventor::removeOverlayWidget()
     if (overlay) stack->removeWidget(overlay);
 }
 
-void View3DInventor::setCursor(const QCursor& aCursor)
+void View3DInventor::setOverrideCursor(const QCursor& aCursor)
 {
     _viewer->getWidget()->setCursor(aCursor);
 }
 
-void View3DInventor::setCursor(Qt::CursorShape aCursor)
+void View3DInventor::restoreOverrideCursor()
 {
-    _viewer->getWidget()->setCursor(aCursor);
+    _viewer->getWidget()->setCursor(QCursor(Qt::ArrowCursor));
 }
 
 void View3DInventor::dump(const char* filename)

@@ -24,12 +24,21 @@
 #include "PreCompiled.h"
 #ifndef _PreComp_
 # include <BRepFill.hxx>
+# include <BRepAdaptor_Curve.hxx>
+# include <BRepAdaptor_HCurve.hxx>
+# include <BRepAdaptor_CompCurve.hxx>
+# include <BRepAdaptor_HCompCurve.hxx>
 # include <TopoDS.hxx>
 # include <TopoDS_Face.hxx>
 # include <TopoDS_Shell.hxx>
 # include <BRepBuilderAPI_MakeWire.hxx>
 # include <BRepOffsetAPI_MakePipeShell.hxx>
+# include <ShapeAnalysis.hxx>
 # include <TopTools_ListIteratorOfListOfShape.hxx>
+# include <TopExp_Explorer.hxx>
+# include <TopoDS.hxx>
+# include <Precision.hxx>
+# include <Handle_Adaptor3d_HCurve.hxx>
 #endif
 
 
@@ -40,10 +49,14 @@ using namespace Part;
 
 PROPERTY_SOURCE(Part::RuledSurface, Part::Feature)
 
+const char* RuledSurface::OrientationEnums[]    = {"Automatic","Forward","Reversed",NULL};
+
 RuledSurface::RuledSurface()
 {
     ADD_PROPERTY_TYPE(Curve1,(0),"Ruled Surface",App::Prop_None,"Curve of ruled surface");
     ADD_PROPERTY_TYPE(Curve2,(0),"Ruled Surface",App::Prop_None,"Curve of ruled surface");
+    ADD_PROPERTY_TYPE(Orientation,((long)0),"Ruled Surface",App::Prop_None,"Orientation of ruled surface");
+    Orientation.setEnums(OrientationEnums);
 }
 
 short RuledSurface::mustExecute() const
@@ -51,6 +64,8 @@ short RuledSurface::mustExecute() const
     if (Curve1.isTouched())
         return 1;
     if (Curve2.isTouched())
+        return 1;
+    if (Orientation.isTouched())
         return 1;
     return 0;
 }
@@ -106,6 +121,60 @@ App::DocumentObjectExecReturn *RuledSurface::execute(void)
 
         if (curve1.IsNull() || curve2.IsNull())
             return new App::DocumentObjectExecReturn("Linked shapes are empty.");
+
+        if (Orientation.getValue() == 0) {
+            // Automatic
+            Handle_Adaptor3d_HCurve a1;
+            Handle_Adaptor3d_HCurve a2;
+            if (curve1.ShapeType() == TopAbs_EDGE && curve2.ShapeType() == TopAbs_EDGE) {
+                BRepAdaptor_Curve adapt1(TopoDS::Edge(curve1));
+                BRepAdaptor_Curve adapt2(TopoDS::Edge(curve2));
+                a1 = new BRepAdaptor_HCurve(adapt1);
+                a2 = new BRepAdaptor_HCurve(adapt2);
+            }
+            else if (curve1.ShapeType() == TopAbs_WIRE && curve2.ShapeType() == TopAbs_WIRE) {
+                BRepAdaptor_CompCurve adapt1(TopoDS::Wire(curve1));
+                BRepAdaptor_CompCurve adapt2(TopoDS::Wire(curve2));
+                a1 = new BRepAdaptor_HCompCurve(adapt1);
+                a2 = new BRepAdaptor_HCompCurve(adapt2);
+            }
+
+            if (!a1.IsNull() && !a2.IsNull()) {
+                // get end points of 1st curve
+                gp_Pnt p1 = a1->Value(a1->FirstParameter());
+                gp_Pnt p2 = a1->Value(a1->LastParameter());
+                if (curve1.Orientation() == TopAbs_REVERSED) {
+                    std::swap(p1, p2);
+                }
+
+                // get end points of 2nd curve
+                gp_Pnt p3 = a2->Value(a2->FirstParameter());
+                gp_Pnt p4 = a2->Value(a2->LastParameter());
+                if (curve2.Orientation() == TopAbs_REVERSED) {
+                    std::swap(p3, p4);
+                }
+
+                // Form two triangles (P1,P2,P3) and (P4,P3,P2) and check their normals.
+                // If the dot product is negative then it's assumed that the resulting face
+                // is twisted, hence the 2nd edge is reversed.
+                gp_Vec v1(p1, p2);
+                gp_Vec v2(p1, p3);
+                gp_Vec n1 = v1.Crossed(v2);
+
+                gp_Vec v3(p4, p3);
+                gp_Vec v4(p4, p2);
+                gp_Vec n2 = v3.Crossed(v4);
+
+                if (n1.Dot(n2) < 0) {
+                    curve2.Reverse();
+                }
+            }
+        }
+        else if (Orientation.getValue() == 2) {
+            // Reverse
+            curve2.Reverse();
+        }
+
         if (curve1.ShapeType() == TopAbs_EDGE && curve2.ShapeType() == TopAbs_EDGE) {
             TopoDS_Face face = BRepFill::Face(TopoDS::Edge(curve1), TopoDS::Edge(curve2));
             this->Shape.setValue(face);
@@ -115,7 +184,7 @@ App::DocumentObjectExecReturn *RuledSurface::execute(void)
             this->Shape.setValue(shell);
         }
         else {
-            return new App::DocumentObjectExecReturn("Curves must either be edges or wires.");
+            return new App::DocumentObjectExecReturn("Curves must either be both edges or both wires.");
         }
         return App::DocumentObject::StdReturn;
     }
@@ -171,8 +240,13 @@ App::DocumentObjectExecReturn *Loft::execute(void)
             const TopoDS_Shape& shape = static_cast<Part::Feature*>(*it)->Shape.getValue();
             if (shape.IsNull())
                 return new App::DocumentObjectExecReturn("Linked shape is invalid.");
-            if (shape.ShapeType() == TopAbs_WIRE) {
-                profiles.Append(shape);
+            if (shape.ShapeType() == TopAbs_FACE) {
+                TopoDS_Wire faceouterWire = ShapeAnalysis::OuterWire(TopoDS::Face(shape));
+                profiles.Append(faceouterWire);
+            }
+            else if (shape.ShapeType() == TopAbs_WIRE) {
+                BRepBuilderAPI_MakeWire mkWire(TopoDS::Wire(shape));
+                profiles.Append(mkWire.Wire());
             }
             else if (shape.ShapeType() == TopAbs_EDGE) {
                 BRepBuilderAPI_MakeWire mkWire(TopoDS::Edge(shape));
@@ -182,7 +256,7 @@ App::DocumentObjectExecReturn *Loft::execute(void)
                 profiles.Append(shape);
             }
             else {
-                return new App::DocumentObjectExecReturn("Linked shape is not a vertex, edge nor wire.");
+                return new App::DocumentObjectExecReturn("Linked shape is not a vertex, edge, wire nor face.");
             }
         }
 
@@ -257,12 +331,16 @@ App::DocumentObjectExecReturn *Sweep::execute(void)
             path = mkWire.Wire();
         }
         catch (Standard_Failure) {
-            if (shape._Shape.ShapeType() == TopAbs_EDGE)
+            if (shape._Shape.ShapeType() == TopAbs_EDGE) {
                 path = shape._Shape;
-            else if (shape._Shape.ShapeType() == TopAbs_WIRE)
-                path = shape._Shape;
-            else
+            }
+            else if (shape._Shape.ShapeType() == TopAbs_WIRE) {
+                BRepBuilderAPI_MakeWire mkWire(TopoDS::Wire(shape._Shape));
+                path = mkWire.Wire();
+            }
+            else {
                 return new App::DocumentObjectExecReturn("Spine is neither an edge nor a wire.");
+            }
         }
     }
 
@@ -278,8 +356,12 @@ App::DocumentObjectExecReturn *Sweep::execute(void)
                 return new App::DocumentObjectExecReturn("Linked shape is invalid.");
             // There is a weird behaviour of BRepOffsetAPI_MakePipeShell when trying to add the wire as is.
             // If we re-create the wire then everything works fine.
-            // https://sourceforge.net/apps/phpbb/free-cad/viewtopic.php?f=10&t=2673&sid=fbcd2ff4589f0b2f79ed899b0b990648#p20268
-            if (shape.ShapeType() == TopAbs_WIRE) {
+            // http://forum.freecadweb.org/viewtopic.php?f=10&t=2673&sid=fbcd2ff4589f0b2f79ed899b0b990648#p20268
+            if (shape.ShapeType() == TopAbs_FACE) {
+                TopoDS_Wire faceouterWire = ShapeAnalysis::OuterWire(TopoDS::Face(shape));
+                profiles.Append(faceouterWire);
+            }
+            else if (shape.ShapeType() == TopAbs_WIRE) {
                 BRepBuilderAPI_MakeWire mkWire(TopoDS::Wire(shape));
                 profiles.Append(mkWire.Wire());
             }
@@ -291,7 +373,7 @@ App::DocumentObjectExecReturn *Sweep::execute(void)
                 profiles.Append(shape);
             }
             else {
-                return new App::DocumentObjectExecReturn("Linked shape is not a vertex, edge nor wire.");
+                return new App::DocumentObjectExecReturn("Linked shape is not a vertex, edge, wire nor face.");
             }
         }
 
@@ -333,4 +415,141 @@ App::DocumentObjectExecReturn *Sweep::execute(void)
         Handle_Standard_Failure e = Standard_Failure::Caught();
         return new App::DocumentObjectExecReturn(e->GetMessageString());
     }
+    catch (...) {
+        return new App::DocumentObjectExecReturn("A fatal error occurred when making the sweep");
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+const char* Part::Offset::ModeEnums[]= {"Skin","Pipe", "RectoVerso",NULL};
+const char* Part::Offset::JoinEnums[]= {"Arc","Tangent", "Intersection",NULL};
+
+PROPERTY_SOURCE(Part::Offset, Part::Feature)
+
+Offset::Offset()
+{
+    ADD_PROPERTY_TYPE(Source,(0),"Offset",App::Prop_None,"Source shape");
+    ADD_PROPERTY_TYPE(Value,(1.0),"Offset",App::Prop_None,"Offset value");
+    ADD_PROPERTY_TYPE(Mode,(long(0)),"Offset",App::Prop_None,"Mode");
+    Mode.setEnums(ModeEnums);
+    ADD_PROPERTY_TYPE(Join,(long(0)),"Offset",App::Prop_None,"Join type");
+    Join.setEnums(JoinEnums);
+    ADD_PROPERTY_TYPE(Intersection,(false),"Offset",App::Prop_None,"Intersection");
+    ADD_PROPERTY_TYPE(SelfIntersection,(false),"Offset",App::Prop_None,"Self Intersection");
+    ADD_PROPERTY_TYPE(Fill,(false),"Offset",App::Prop_None,"Fill offset");
+}
+
+short Offset::mustExecute() const
+{
+    if (Source.isTouched())
+        return 1;
+    if (Value.isTouched())
+        return 1;
+    if (Mode.isTouched())
+        return 1;
+    if (Join.isTouched())
+        return 1;
+    if (Intersection.isTouched())
+        return 1;
+    if (SelfIntersection.isTouched())
+        return 1;
+    if (Fill.isTouched())
+        return 1;
+    return 0;
+}
+
+App::DocumentObjectExecReturn *Offset::execute(void)
+{
+    App::DocumentObject* source = Source.getValue();
+    if (!(source && source->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId())))
+        return new App::DocumentObjectExecReturn("No source shape linked.");
+    double offset = Value.getValue();
+    double tol = Precision::Confusion();
+    bool inter = Intersection.getValue();
+    bool self = SelfIntersection.getValue();
+    short mode = (short)Mode.getValue();
+    short join = (short)Join.getValue();
+    bool fill = Fill.getValue();
+    const TopoShape& shape = static_cast<Part::Feature*>(source)->Shape.getShape();
+    if (fabs(offset) > 2*tol)
+        this->Shape.setValue(shape.makeOffsetShape(offset, tol, inter, self, mode, join, fill));
+    else
+        this->Shape.setValue(shape);
+    return App::DocumentObject::StdReturn;
+}
+
+// ----------------------------------------------------------------------------
+
+const char* Part::Thickness::ModeEnums[]= {"Skin","Pipe", "RectoVerso",NULL};
+const char* Part::Thickness::JoinEnums[]= {"Arc","Tangent", "Intersection",NULL};
+
+PROPERTY_SOURCE(Part::Thickness, Part::Feature)
+
+Thickness::Thickness()
+{
+    ADD_PROPERTY_TYPE(Faces,(0),"Thickness",App::Prop_None,"Source shape");
+    ADD_PROPERTY_TYPE(Value,(1.0),"Thickness",App::Prop_None,"Thickness value");
+    ADD_PROPERTY_TYPE(Mode,(long(0)),"Thickness",App::Prop_None,"Mode");
+    Mode.setEnums(ModeEnums);
+    ADD_PROPERTY_TYPE(Join,(long(0)),"Thickness",App::Prop_None,"Join type");
+    Join.setEnums(JoinEnums);
+    ADD_PROPERTY_TYPE(Intersection,(false),"Thickness",App::Prop_None,"Intersection");
+    ADD_PROPERTY_TYPE(SelfIntersection,(false),"Thickness",App::Prop_None,"Self Intersection");
+}
+
+short Thickness::mustExecute() const
+{
+    if (Faces.isTouched())
+        return 1;
+    if (Value.isTouched())
+        return 1;
+    if (Mode.isTouched())
+        return 1;
+    if (Join.isTouched())
+        return 1;
+    if (Intersection.isTouched())
+        return 1;
+    if (SelfIntersection.isTouched())
+        return 1;
+    return 0;
+}
+
+App::DocumentObjectExecReturn *Thickness::execute(void)
+{
+    App::DocumentObject* source = Faces.getValue();
+    if (!(source && source->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId())))
+        return new App::DocumentObjectExecReturn("No source shape linked.");
+    const TopoShape& shape = static_cast<Part::Feature*>(source)->Shape.getShape();
+    if (shape.isNull())
+        return new App::DocumentObjectExecReturn("Source shape is empty.");
+
+    int countSolids = 0;
+    TopExp_Explorer xp;
+    xp.Init(shape._Shape,TopAbs_SOLID);
+    for (;xp.More(); xp.Next()) {
+        countSolids++;
+    }
+    if (countSolids != 1)
+        return new App::DocumentObjectExecReturn("Source shape is not a solid.");
+
+    TopTools_ListOfShape closingFaces;
+    const std::vector<std::string>& subStrings = Faces.getSubValues();
+    for (std::vector<std::string>::const_iterator it = subStrings.begin(); it != subStrings.end(); ++it) {
+        TopoDS_Face face = TopoDS::Face(shape.getSubShape(it->c_str()));
+        closingFaces.Append(face);
+    }
+
+    double thickness = Value.getValue();
+    double tol = Precision::Confusion();
+    bool inter = Intersection.getValue();
+    bool self = SelfIntersection.getValue();
+    short mode = (short)Mode.getValue();
+    short join = (short)Join.getValue();
+
+    if (fabs(thickness) > 2*tol)
+        this->Shape.setValue(shape.makeThickSolid(closingFaces, thickness, tol, inter, self, mode, join));
+    else
+        this->Shape.setValue(shape);
+    return App::DocumentObject::StdReturn;
 }

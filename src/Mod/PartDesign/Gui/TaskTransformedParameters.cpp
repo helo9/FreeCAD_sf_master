@@ -45,6 +45,7 @@
 #include <Mod/PartDesign/App/FeatureTransformed.h>
 #include <Mod/PartDesign/App/FeatureAdditive.h>
 #include <Mod/PartDesign/App/FeatureSubtractive.h>
+#include "ReferenceSelection.h"
 
 using namespace PartDesignGui;
 using namespace Gui;
@@ -73,6 +74,22 @@ TaskTransformedParameters::TaskTransformedParameters(TaskMultiTransformParameter
 {
     // Original feature selection makes no sense inside a MultiTransform
     originalSelectionMode = false;
+}
+
+TaskTransformedParameters::~TaskTransformedParameters()
+{
+    // make sure to remove selection gate in all cases
+    Gui::Selection().rmvSelectionGate();
+}
+
+bool TaskTransformedParameters::isViewUpdated() const
+{
+    return (blockUpdate == false);
+}
+
+int TaskTransformedParameters::getUpdateViewTimeout() const
+{
+    return 500;
 }
 
 const bool TaskTransformedParameters::originalSelected(const Gui::SelectionChanges& msg)
@@ -141,6 +158,16 @@ App::DocumentObject* TaskTransformedParameters::getSupportObject() const
     }
 }
 
+App::DocumentObject* TaskTransformedParameters::getSketchObject() const
+{
+    if (insideMultiTransform) {
+        return parentTask->getSketchObject();
+    } else {
+        PartDesign::Transformed* pcTransformed = static_cast<PartDesign::Transformed*>(TransformedView->getObject());
+        return pcTransformed->getSketchObject();
+    }
+}
+
 void TaskTransformedParameters::hideObject()
 {
     Gui::Document* doc = Gui::Application::Instance->activeDocument();
@@ -192,42 +219,9 @@ void TaskTransformedParameters::exitSelectionMode()
     hideOriginals();
 }
 
-class ReferenceSelection : public Gui::SelectionFilterGate
-{
-    const App::DocumentObject* support;
-    bool edge, plane;
-public:
-    ReferenceSelection(const App::DocumentObject* support_, bool edge_, bool plane_)
-        : Gui::SelectionFilterGate((Gui::SelectionFilter*)0),
-          support(support_), edge(edge_), plane(plane_)
-    {
-    }
-    bool allow(App::Document* pDoc, App::DocumentObject* pObj, const char* sSubName)
-    {
-        if (!sSubName || sSubName[0] == '\0')
-            return false;
-        if (pObj != support)
-            return false;
-        std::string subName(sSubName);
-        if (edge && subName.size() > 4 && subName.substr(0,4) == "Edge")
-            return true;
-        if (plane && subName.size() > 4 && subName.substr(0,4) == "Face") {
-            const Part::TopoShape &shape = static_cast<const Part::Feature*>(support)->Shape.getValue();
-            TopoDS_Shape sh = shape.getSubShape(subName.c_str());
-            const TopoDS_Face& face = TopoDS::Face(sh);
-            if (!face.IsNull()) {
-                BRepAdaptor_Surface adapt(face);
-                if (adapt.GetType() == GeomAbs_Plane)
-                    return true;
-            }
-        }
-        return false;
-    }
-};
-
 void TaskTransformedParameters::addReferenceSelectionGate(bool edge, bool face)
 {
-    Gui::Selection().addSelectionGate(new ReferenceSelection(getSupportObject(), edge, face));
+    Gui::Selection().addSelectionGate(new ReferenceSelection(getSupportObject(), edge, face, true));
 }
 
 
@@ -275,7 +269,10 @@ bool TaskDlgTransformedParameters::accept()
 
 bool TaskDlgTransformedParameters::reject()
 {
-    // Get object before view is invalidated
+    // ensure that we are not in selection mode
+    parameter->exitSelectionMode();
+
+    // get object and originals before view is invalidated (if it is invalidated)
     PartDesign::Transformed* pcTransformed = static_cast<PartDesign::Transformed*>(TransformedView->getObject());
     std::vector<App::DocumentObject*> pcOriginals = pcTransformed->Originals.getValues();
 

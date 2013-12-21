@@ -27,7 +27,7 @@ from DraftTools import translate
 
 __title__="FreeCAD Arch Floor"
 __author__ = "Yorik van Havre"
-__url__ = "http://free-cad.sourceforge.net"
+__url__ = "http://www.freecadweb.org"
 
 def makeFloor(objectslist=None,join=True,name=str(translate("Arch","Floor"))):
     '''makeFloor(objectslist,[joinmode]): creates a floor including the
@@ -76,8 +76,10 @@ class _CommandFloor:
 class _Floor:
     "The Floor object"
     def __init__(self,obj):
-        obj.addProperty("App::PropertyLength","Height","Base",
+        obj.addProperty("App::PropertyLength","Height","Arch",
                         str(translate("Arch","The height of this floor")))
+        obj.addProperty("App::PropertyPlacement","Placement","Arch",
+                        str(translate("Arch","The placement of this group")))
         self.Type = "Floor"
         obj.Proxy = self
         self.Object = obj
@@ -90,10 +92,18 @@ class _Floor:
             self.Type = state
 
     def execute(self,obj):
-        pass
+        if hasattr(obj,"Placement"):
+            self.OldPlacement = obj.Placement.copy()
         
     def onChanged(self,obj,prop):
         self.Object = obj
+        if prop == "Placement":
+            if hasattr(self,"OldPlacement"):
+                delta = obj.Placement.Base.sub(self.OldPlacement.Base)
+                for o in obj.Group:
+                    if hasattr(o,"Placement"):
+                        o.Placement.move(delta)
+            self.OldPlacement = FreeCAD.Placement(obj.Placement)
 
     def addObject(self,child):
         if hasattr(self,"Object"):

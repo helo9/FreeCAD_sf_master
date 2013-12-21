@@ -27,13 +27,17 @@
 # include <gp_Trsf.hxx>
 # include <gp_Ax1.hxx>
 # include <BRepBuilderAPI_MakeShape.hxx>
+# include <BRepAlgoAPI_Fuse.hxx>
+# include <BRepAlgoAPI_Common.hxx>
 # include <TopTools_ListIteratorOfListOfShape.hxx>
 # include <TopExp.hxx>
 # include <TopTools_IndexedMapOfShape.hxx>
-// includes for findAllFacesCutBy()
+# include <Standard_Failure.hxx>
 # include <TopoDS_Face.hxx>
 # include <gp_Dir.hxx>
 # include <gp_Pln.hxx> // for Precision::Confusion()
+# include <Bnd_Box.hxx>
+# include <BRepBndLib.hxx>
 #endif
 
 
@@ -46,10 +50,10 @@
 #include <Base/Stream.h>
 #include <Base/Placement.h>
 #include <Base/Rotation.h>
+#include <App/FeaturePythonPyImp.h>
 
 #include "PartFeature.h"
 #include "PartFeaturePy.h"
-#include "FeaturePythonPy.h"
 
 using namespace Part;
 
@@ -69,6 +73,19 @@ Feature::~Feature()
 short Feature::mustExecute(void) const
 {
     return GeoFeature::mustExecute();
+}
+
+App::DocumentObjectExecReturn *Feature::recompute(void)
+{
+    try {
+        return App::GeoFeature::recompute();
+    }
+    catch (Standard_Failure) {
+        Handle_Standard_Failure e = Standard_Failure::Caught();
+        App::DocumentObjectExecReturn* ret = new App::DocumentObjectExecReturn(e->GetMessageString());
+        if (ret->Why.empty()) ret->Why = "Unknown OCC exception";
+        return ret;
+    }
 }
 
 App::DocumentObjectExecReturn *Feature::execute(void)
@@ -257,13 +274,12 @@ PROPERTY_SOURCE_TEMPLATE(Part::FeaturePython, Part::Feature)
 template<> const char* Part::FeaturePython::getViewProviderName(void) const {
     return "PartGui::ViewProviderPython";
 }
-
 template<> PyObject* Part::FeaturePython::getPyObject(void) {
-    if (PythonObject.is(Py::_None())){
+    if (PythonObject.is(Py::_None())) {
         // ref counter is set to 1
-        PythonObject = Py::Object(new Part::FeaturePythonPy(this),true);
+        PythonObject = Py::Object(new FeaturePythonPyT<Part::PartFeaturePy>(this),true);
     }
-    return Py::new_reference_to(PythonObject); 
+    return Py::new_reference_to(PythonObject);
 }
 /// @endcond
 
@@ -318,4 +334,52 @@ std::vector<Part::cutFaces> Part::findAllFacesCutBy(
     }
 
     return result;
+}
+
+const bool Part::checkIntersection(const TopoDS_Shape& first, const TopoDS_Shape& second,
+                                   const bool quick, const bool touch_is_intersection) {
+    Bnd_Box first_bb, second_bb;
+    BRepBndLib::Add(first, first_bb);
+    first_bb.SetGap(0);
+    BRepBndLib::Add(second, second_bb);
+    second_bb.SetGap(0);
+
+    // Note: This test fails if the objects are touching one another at zero distance
+    if (first_bb.IsOut(second_bb))
+        return false; // no intersection
+    if (quick)
+        return true; // assumed intersection
+
+    // Try harder
+    if (touch_is_intersection) {
+        // If both shapes fuse to a single solid, then they intersect
+        BRepAlgoAPI_Fuse mkFuse(first, second);
+        if (!mkFuse.IsDone())
+            return false;
+        if (mkFuse.Shape().IsNull())
+            return false;
+
+        // Did we get one or two solids?
+        TopExp_Explorer xp;
+        xp.Init(mkFuse.Shape(),TopAbs_SOLID);
+        if (xp.More()) {
+            // At least one solid
+            xp.Next();
+            return (xp.More() == Standard_False);
+        } else {
+            return false;
+        }
+    } else {
+        // If both shapes have common material, then they intersect
+        BRepAlgoAPI_Common mkCommon(first, second);
+        if (!mkCommon.IsDone())
+            return false;
+        if (mkCommon.Shape().IsNull())
+            return false;
+
+        // Did we get a solid?
+        TopExp_Explorer xp;
+        xp.Init(mkCommon.Shape(),TopAbs_SOLID);
+        return (xp.More() == Standard_True);
+    }
 }

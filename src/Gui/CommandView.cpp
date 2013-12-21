@@ -38,6 +38,7 @@
 #include "Application.h"
 #include "BitmapFactory.h"
 #include "Control.h"
+#include "Clipping.h"
 #include "FileDialog.h"
 #include "MainWindow.h"
 #include "Tree.h"
@@ -49,6 +50,7 @@
 #include "Selection.h"
 #include "SoFCOffscreenRenderer.h"
 #include "SoFCBoundingBox.h"
+#include "SoFCUnifiedSelection.h"
 #include "SoAxisCrossKit.h"
 #include "View3DInventor.h"
 #include "View3DInventorViewer.h"
@@ -65,6 +67,8 @@
 #include <Base/Exception.h>
 #include <Base/FileInfo.h>
 #include <Base/Reader.h>
+#include <Base/Parameter.h>
+#include <App/Application.h>
 #include <App/Document.h>
 #include <App/GeoFeature.h>
 #include <App/DocumentObjectGroup.h>
@@ -473,12 +477,15 @@ StdCmdToggleClipPlane::StdCmdToggleClipPlane()
 Action * StdCmdToggleClipPlane::createAction(void)
 {
     Action *pcAction = (Action*)Command::createAction();
+#if 0
     pcAction->setCheckable(true);
+#endif
     return pcAction;
 }
 
 void StdCmdToggleClipPlane::activated(int iMsg)
 {
+#if 0
     View3DInventor* view = qobject_cast<View3DInventor*>(getMainWindow()->activeWindow());
     if (view) {
         if (iMsg > 0 && !view->hasClippingPlane())
@@ -486,10 +493,17 @@ void StdCmdToggleClipPlane::activated(int iMsg)
         else if (iMsg == 0 && view->hasClippingPlane())
             view->toggleClippingPlane();
     }
+#else
+    View3DInventor* view = qobject_cast<View3DInventor*>(getMainWindow()->activeWindow());
+    if (view) {
+        Gui::Control().showDialog(new Gui::Dialog::TaskClipping(view));
+    }
+#endif
 }
 
 bool StdCmdToggleClipPlane::isActive(void)
 {
+#if 0
     View3DInventor* view = qobject_cast<View3DInventor*>(getMainWindow()->activeWindow());
     if (view) {
         Action* action = qobject_cast<Action*>(_pcAction);
@@ -503,6 +517,11 @@ bool StdCmdToggleClipPlane::isActive(void)
             action->setChecked(false);
         return false;
     }
+#else
+    if (Gui::Control().activeDialog())
+        return false;
+    return true;
+#endif
 }
 
 DEF_STD_CMD_ACL(StdCmdDrawStyle);
@@ -779,7 +798,7 @@ void StdCmdToggleObjects::activated(int iMsg)
         (App::DocumentObject::getClassTypeId());
 
     for (std::vector<App::DocumentObject*>::const_iterator it=obj.begin();it!=obj.end();++it) {
-        if (doc && doc->isShow((*it)->getNameInDocument()))
+        if (doc->isShow((*it)->getNameInDocument()))
             doCommand(Gui,"Gui.getDocument(\"%s\").getObject(\"%s\").Visibility=False"
                          , app->getName(), (*it)->getNameInDocument());
         else
@@ -1299,11 +1318,17 @@ void StdViewScreenShot::activated(int iMsg)
             formats = rd.getWriteImageFiletypeInfo();
         }
 
+        Base::Reference<ParameterGrp> hExt = App::GetApplication().GetUserParameter().GetGroup("BaseApp")
+                                   ->GetGroup("Preferences")->GetGroup("General");
+        QString ext = QString::fromAscii(hExt->GetASCII("OffscreenImageFormat").c_str());
+
         QStringList filter;
         QString selFilter;
         for (QStringList::Iterator it = formats.begin(); it != formats.end(); ++it) {
             filter << QString::fromAscii("%1 %2 (*.%3)").arg((*it).toUpper()).
                 arg(QObject::tr("files")).arg((*it).toLower());
+            if (ext == *it)
+                selFilter = filter.last();
         }
 
         FileOptionsDialog fd(getMainWindow(), 0);
@@ -1311,6 +1336,8 @@ void StdViewScreenShot::activated(int iMsg)
         fd.setAcceptMode(QFileDialog::AcceptSave);
         fd.setWindowTitle(QObject::tr("Save picture"));
         fd.setFilters(filter);
+        if (!selFilter.isEmpty())
+            fd.selectNameFilter(selFilter);
 
         // create the image options widget
         DlgSettingsImageImp* opt = new DlgSettingsImageImp(&fd);
@@ -1324,7 +1351,7 @@ void StdViewScreenShot::activated(int iMsg)
                          opt, SLOT(onSelectedFilter(const QString&)));
 
         if (fd.exec() == QDialog::Accepted) {
-            selFilter = fd.selectedFilter();
+            selFilter = fd.selectedNameFilter();
             QString fn = fd.selectedFiles().front();
             // We must convert '\' path separators to '/' before otherwise
             // Python would interpret them as escape sequences.
@@ -1344,6 +1371,8 @@ void StdViewScreenShot::activated(int iMsg)
                     break;
                 }
             }
+
+            hExt->SetASCII("OffscreenImageFormat", (const char*)format.toAscii());
 
             // which background chosen
             const char* background;
@@ -1437,14 +1466,23 @@ void StdCmdToggleNavigation::activated(int iMsg)
 
 bool StdCmdToggleNavigation::isActive(void)
 {
+    //#0001087: Inventor Navigation continues with released Mouse Button
+    //This happens because 'Esc' is also used to close the task dialog.
+    //Add also new method 'isRedirectToSceneGraphEnabled' to explicitly
+    //check if this is allowed.
+    if (Gui::Control().activeDialog())
+        return false;
     Gui::MDIView* view = Gui::getMainWindow()->activeWindow();
     if (view && view->isDerivedFrom(Gui::View3DInventor::getClassTypeId())) {
         Gui::View3DInventorViewer* viewer = static_cast<Gui::View3DInventor*>(view)->getViewer();
-        return viewer->isEditing();
+        return viewer->isEditing() && viewer->isRedirectToSceneGraphEnabled();
     }
     return false;
 }
 
+
+
+#if 0 // old Axis command
 // Command to show/hide axis cross
 class StdCmdAxisCross : public Gui::Command
 {
@@ -1526,6 +1564,50 @@ protected:
         }
     }
 };
+#else 
+//===========================================================================
+// Std_ViewExample1
+//===========================================================================
+DEF_STD_CMD_A(StdCmdAxisCross);
+
+StdCmdAxisCross::StdCmdAxisCross()
+  : Command("Std_AxisCross")
+{
+        sGroup        = QT_TR_NOOP("Standard-View");
+        sMenuText     = QT_TR_NOOP("Toggle axis cross");
+        sToolTipText  = QT_TR_NOOP("Toggle axis cross");
+        sStatusTip    = QT_TR_NOOP("Toggle axis cross");
+        sWhatsThis    = "Std_AxisCross";
+}
+
+void StdCmdAxisCross::activated(int iMsg)
+{
+  Gui::View3DInventor* view = qobject_cast<View3DInventor*>(Gui::getMainWindow()->activeWindow());
+  if (view ){
+      if(view->getViewer()->hasAxisCross()== false) 
+         doCommand(Command::Gui,"Gui.ActiveDocument.ActiveView.setAxisCross(True)");
+      else
+         doCommand(Command::Gui,"Gui.ActiveDocument.ActiveView.setAxisCross(False)");
+  }
+}
+
+bool StdCmdAxisCross::isActive(void)
+{
+    Gui::View3DInventor* view = qobject_cast<View3DInventor*>(Gui::getMainWindow()->activeWindow());
+    if (view && view->getViewer()->hasAxisCross()) {
+        if (!_pcAction->isChecked())
+            _pcAction->setChecked(true);
+    }
+    else {
+        if (_pcAction->isChecked())
+            _pcAction->setChecked(false);
+    }
+    if (view ) return true;
+    return false;
+
+}
+
+#endif 
 
 //===========================================================================
 // Std_ViewExample1
@@ -1533,7 +1615,7 @@ protected:
 DEF_STD_CMD_A(StdCmdViewExample1);
 
 StdCmdViewExample1::StdCmdViewExample1()
-  : Command("Std_ViewExample1")
+  : Command("Std_AxisCross")
 {
   sGroup        = QT_TR_NOOP("Standard-View");
   sMenuText     = QT_TR_NOOP("Inventor example #1");
@@ -1916,6 +1998,9 @@ static void selectionCallback(void * ud, SoEventCallback * cb)
 {
     Gui::View3DInventorViewer* view  = reinterpret_cast<Gui::View3DInventorViewer*>(cb->getUserData());
     view->removeEventCallback(SoMouseButtonEvent::getClassTypeId(), selectionCallback, ud);
+    SoNode* root = view->getSceneGraph();
+    static_cast<Gui::SoFCUnifiedSelection*>(root)->selectionRole.setValue(TRUE);
+
     std::vector<SbVec2f> picked = view->getGLPolygon();
     SoCamera* cam = view->getCamera();
     SbViewVolume vv = cam->getViewVolume();
@@ -1939,6 +2024,9 @@ static void selectionCallback(void * ud, SoEventCallback * cb)
         cb->setHandled();
         std::vector<App::GeoFeature*> geom = doc->getObjectsOfType<App::GeoFeature>();
         for (std::vector<App::GeoFeature*>::iterator it = geom.begin(); it != geom.end(); ++it) {
+            Gui::ViewProvider* vp = Application::Instance->getViewProvider(*it);
+            if (!vp->isVisible())
+                continue;
             std::vector<App::Property*> props;
             (*it)->getPropertyList(props);
             for (std::vector<App::Property*>::iterator jt = props.begin(); jt != props.end(); ++jt) {
@@ -1960,11 +2048,13 @@ static void selectionCallback(void * ud, SoEventCallback * cb)
 void StdBoxSelection::activated(int iMsg)
 {
     View3DInventor* view = qobject_cast<View3DInventor*>(getMainWindow()->activeWindow());
-    if ( view ) {
+    if (view) {
         View3DInventorViewer* viewer = view->getViewer();
         if (!viewer->isSelecting()) {
-            viewer->startSelection(View3DInventorViewer::Rectangle);
+            viewer->startSelection(View3DInventorViewer::Rubberband);
             viewer->addEventCallback(SoMouseButtonEvent::getClassTypeId(), selectionCallback);
+            SoNode* root = viewer->getSceneGraph();
+            static_cast<Gui::SoFCUnifiedSelection*>(root)->selectionRole.setValue(FALSE);
         }
     }
 }
@@ -2125,6 +2215,62 @@ void StdCmdDemoMode::activated(int iMsg)
     dlg->show();
 }
 
+//===========================================================================
+// Part_Measure_Clear_All
+//===========================================================================
+
+DEF_STD_CMD(CmdViewMeasureClearAll);
+
+CmdViewMeasureClearAll::CmdViewMeasureClearAll()
+  : Command("View_Measure_Clear_All")
+{
+    sGroup        = QT_TR_NOOP("Measure");
+    sMenuText     = QT_TR_NOOP("Clear measurement");
+    sToolTipText  = QT_TR_NOOP("Clear measurement");
+    sWhatsThis    = sToolTipText;
+    sStatusTip    = sToolTipText;
+    sPixmap       = "Part_Measure_Clear_All";
+}
+
+void CmdViewMeasureClearAll::activated(int iMsg)
+{
+  Gui::View3DInventor *view = dynamic_cast<Gui::View3DInventor*>(Gui::Application::Instance->
+    activeDocument()->getActiveView());
+  if (!view)
+    return;
+  Gui::View3DInventorViewer *viewer = view->getViewer();
+  if (!viewer)
+    return;
+  viewer->eraseAllDimensions();
+}
+
+//===========================================================================
+// Part_Measure_Toggle_All
+//===========================================================================
+
+DEF_STD_CMD(CmdViewMeasureToggleAll);
+
+CmdViewMeasureToggleAll::CmdViewMeasureToggleAll()
+  : Command("View_Measure_Toggle_All")
+{
+  sGroup        = QT_TR_NOOP("Measure");
+  sMenuText     = QT_TR_NOOP("Toggle measurement");
+  sToolTipText  = QT_TR_NOOP("Toggle measurement");
+  sWhatsThis    = sToolTipText;
+  sStatusTip    = sToolTipText;
+  sPixmap       = "Part_Measure_Toggle_All";
+}
+
+void CmdViewMeasureToggleAll::activated(int iMsg)
+{
+  ParameterGrp::handle group = App::GetApplication().GetUserParameter().
+  GetGroup("BaseApp")->GetGroup("Preferences")->GetGroup("View");
+  bool visibility = group->GetBool("DimensionsVisible", true);
+  if (visibility)
+    group->SetBool("DimensionsVisible", false);
+  else
+    group->SetBool("DimensionsVisible", true);
+}
 
 //===========================================================================
 // Instantiation
@@ -2190,6 +2336,8 @@ void CreateViewStdCommands(void)
     rcCmdMgr.addCommand(new StdCmdDemoMode());
     rcCmdMgr.addCommand(new StdCmdToggleNavigation());
     rcCmdMgr.addCommand(new StdCmdAxisCross());
+    rcCmdMgr.addCommand(new CmdViewMeasureClearAll());
+    rcCmdMgr.addCommand(new CmdViewMeasureToggleAll());
 }
 
 } // namespace Gui

@@ -342,7 +342,7 @@ PyObject* MatrixPy::invert(PyObject * args)
 
     PY_TRY {
         if (getMatrixPtr()->determinant() > DBL_EPSILON)
-            getMatrixPtr()->inverse();
+            getMatrixPtr()->inverseGauss();
         else {
             PyErr_SetString(PyExc_Exception, "Cannot invert singular matrix");
             return 0;
@@ -361,7 +361,7 @@ PyObject* MatrixPy::inverse(PyObject * args)
     PY_TRY {
         if (getMatrixPtr()->determinant() > DBL_EPSILON) {
             Base::Matrix4D m = *getMatrixPtr();
-            m.inverse();
+            m.inverseGauss();
             return new MatrixPy(m);
         }
         else {
@@ -662,24 +662,24 @@ void  MatrixPy::setA44(Py::Float arg)
     (*this->getMatrixPtr())[3][3] = (double)arg;
 }
 
-Py::List MatrixPy::getA(void) const
+Py::Sequence MatrixPy::getA(void) const
 {
     double mat[16];
     this->getMatrixPtr()->getMatrix(mat);
-    Py::List list(16);
+    Py::Tuple tuple(16);
     for (int i=0; i<16; i++) {
-        list[i] = Py::Float(mat[i]);
+        tuple[i] = Py::Float(mat[i]);
     }
-    return list;
+    return tuple;
 }
 
-void MatrixPy::setA(Py::List arg)
+void MatrixPy::setA(Py::Sequence arg)
 {
     double mat[16];
     this->getMatrixPtr()->getMatrix(mat);
 
     int index=0;
-    for (Py::List::iterator it = arg.begin(); it != arg.end() && index < 16; ++it) {
+    for (Py::Sequence::iterator it = arg.begin(); it != arg.end() && index < 16; ++it) {
         mat[index++] = (double)Py::Float(*it);
     }
 

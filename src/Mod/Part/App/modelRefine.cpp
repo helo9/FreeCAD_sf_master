@@ -39,6 +39,7 @@
 #include <BRepLib_MakeWire.hxx>
 #include <BRepLib_FuseEdges.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
 #include <ShapeBuild_ReShape.hxx>
 #include <ShapeFix_Face.hxx>
@@ -370,19 +371,22 @@ TopoDS_Face FaceTypedPlane::buildFace(const FaceVectorType &faces) const
 
     std::sort(wires.begin(), wires.end(), ModelRefine::WireSort());
 
-    TopoDS_Face current = BRepLib_MakeFace(wires.at(0), Standard_True);
+    BRepLib_MakeFace faceMaker(wires.at(0), Standard_True);
+    if (faceMaker.Error() != BRepLib_FaceDone)
+        return TopoDS_Face();
+    TopoDS_Face current = faceMaker.Face();
     if (wires.size() > 1)
     {
         ShapeFix_Face faceFix(current);
         faceFix.SetContext(new ShapeBuild_ReShape());
         for (size_t index(1); index<wires.size(); ++index)
             faceFix.Add(wires.at(index));
-        Standard_Boolean signal = faceFix.Perform();
-        if (signal > ShapeExtend_DONE)
+        faceFix.Perform();
+        if (faceFix.Status(ShapeExtend_FAIL))
             return TopoDS_Face();
         faceFix.FixOrientation();
-        signal = faceFix.Perform();
-        if (signal > ShapeExtend_DONE)
+        faceFix.Perform();
+        if(faceFix.Status(ShapeExtend_FAIL))
             return TopoDS_Face();
         current = faceFix.Face();
     }
@@ -468,10 +472,12 @@ TopoDS_Face FaceTypedCylinder::buildFace(const FaceVectorType &faces) const
     //fix newly constructed face. Orientation doesn't seem to get fixed the first call.
     ShapeFix_Face faceFixer(faceMaker.Face());
     faceFixer.SetContext(new ShapeBuild_ReShape());
-    if (faceFixer.Perform() > ShapeExtend_DONE5)
+    faceFixer.Perform();
+    if (faceFixer.Status(ShapeExtend_FAIL))
         return dummy;
     faceFixer.FixOrientation();
-    if (faceFixer.Perform() > ShapeExtend_DONE5)
+    faceFixer.Perform();
+    if (faceFixer.Status(ShapeExtend_FAIL))
         return dummy;
 
     return faceFixer.Face();
@@ -698,7 +704,7 @@ void Part::BRepBuilderAPI_RefineModel::Build()
 
     if (myShape.ShapeType() == TopAbs_SOLID) {
         const TopoDS_Solid &solid = TopoDS::Solid(myShape);
-        BRepTools_ReShape reshape;
+        BRepBuilderAPI_MakeSolid mkSolid;
         TopExp_Explorer it;
         for (it.Init(solid, TopAbs_SHELL); it.More(); it.Next()) {
             const TopoDS_Shell &currentShell = TopoDS::Shell(it.Current());
@@ -706,15 +712,18 @@ void Part::BRepBuilderAPI_RefineModel::Build()
             if (uniter.process()) {
                 if (uniter.isModified()) {
                     const TopoDS_Shell &newShell = uniter.getShell();
-                    reshape.Replace(currentShell, newShell);
+                    mkSolid.Add(newShell);
                     LogModifications(uniter);
+                }
+                else {
+                    mkSolid.Add(currentShell);
                 }
             }
             else {
                 Standard_Failure::Raise("Removing splitter failed");
             }
         }
-        myShape = reshape.Apply(solid);
+        myShape = mkSolid.Solid();
     }
     else if (myShape.ShapeType() == TopAbs_SHELL) {
         const TopoDS_Shell& shell = TopoDS::Shell(myShape);

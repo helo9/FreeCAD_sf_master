@@ -417,11 +417,11 @@ void MeshAlgorithm::GetFacetBorders (const std::vector<unsigned long> &raulInd,
             if (ulNB != ULONG_MAX) {
                 if (rclFAry[ulNB].IsFlag(MeshFacet::VISIT) == true)
                     continue;
-                }
-
-                aclEdges.push_back(rclFacet.GetEdge(i));
             }
+
+            aclEdges.push_back(rclFacet.GetEdge(i));
         }
+    }
 
     if (aclEdges.size() == 0)
         return; // no borders found (=> solid)
@@ -1538,7 +1538,6 @@ bool MeshAlgorithm::ConnectLines (std::list<std::pair<Base::Vector3f, Base::Vect
         rclLines.erase(pFront);
       }
 
-
       if (pEnd != rclLines.end())
       {
         if (bEndFirst == true)
@@ -1795,6 +1794,16 @@ MeshRefPointToFacets::operator[] (unsigned long pos) const
     return _map[pos];
 }
 
+void MeshRefPointToFacets::AddNeighbour(unsigned long pos, unsigned long facet)
+{
+    _map[pos].insert(facet);
+}
+
+void MeshRefPointToFacets::RemoveNeighbour(unsigned long pos, unsigned long facet)
+{
+    _map[pos].erase(facet);
+}
+
 //----------------------------------------------------------------------------
 
 void MeshRefFacetToFacets::Rebuild (void)
@@ -1880,6 +1889,16 @@ const std::set<unsigned long>&
 MeshRefPointToPoints::operator[] (unsigned long pos) const
 {
     return _map[pos];
+}
+
+void MeshRefPointToPoints::AddNeighbour(unsigned long pos, unsigned long facet)
+{
+    _map[pos].insert(facet);
+}
+
+void MeshRefPointToPoints::RemoveNeighbour(unsigned long pos, unsigned long facet)
+{
+    _map[pos].erase(facet);
 }
 
 //----------------------------------------------------------------------------

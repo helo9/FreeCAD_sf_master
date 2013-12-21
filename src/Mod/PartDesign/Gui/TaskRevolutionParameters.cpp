@@ -64,8 +64,16 @@ TaskRevolutionParameters::TaskRevolutionParameters(ViewProviderRevolution *Revol
             this, SLOT(onMidplane(bool)));
     connect(ui->checkBoxReversed, SIGNAL(toggled(bool)),
             this, SLOT(onReversed(bool)));
+    connect(ui->checkBoxUpdateView, SIGNAL(toggled(bool)),
+            this, SLOT(onUpdateView(bool)));
 
     this->groupLayout()->addWidget(proxy);
+
+    // Temporarily prevent unnecessary feature recomputes
+    ui->doubleSpinBox->blockSignals(true);
+    ui->axis->blockSignals(true);
+    ui->checkBoxMidplane->blockSignals(true);
+    ui->checkBoxReversed->blockSignals(true);
 
     PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
     double l = pcRevolution->Angle.getValue();
@@ -96,7 +104,7 @@ TaskRevolutionParameters::TaskRevolutionParameters(ViewProviderRevolution *Revol
     }
 
     if (pos < 0 || pos >= ui->axis->count()) {
-        ui->axis->addItem(QString::fromAscii("Undefined"));
+        ui->axis->addItem(tr("Undefined"));
         pos = ui->axis->count()-1;
     }
 
@@ -105,14 +113,20 @@ TaskRevolutionParameters::TaskRevolutionParameters(ViewProviderRevolution *Revol
     ui->checkBoxMidplane->setChecked(mirrored);
     ui->checkBoxReversed->setChecked(reversed);
 
+    ui->doubleSpinBox->blockSignals(false);
+    ui->axis->blockSignals(false);
+    ui->checkBoxMidplane->blockSignals(false);
+    ui->checkBoxReversed->blockSignals(false);
+
     setFocus ();
 }
 
 void TaskRevolutionParameters::onAngleChanged(double len)
 {
     PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
-    pcRevolution->Angle.setValue((float)len);
-    pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+    pcRevolution->Angle.setValue(len);
+    if (updateView())
+        pcRevolution->getDocument()->recomputeFeature(pcRevolution);
 }
 
 void TaskRevolutionParameters::onAxisChanged(int num)
@@ -120,6 +134,9 @@ void TaskRevolutionParameters::onAxisChanged(int num)
     PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
     Sketcher::SketchObject *pcSketch = static_cast<Sketcher::SketchObject*>(pcRevolution->Sketch.getValue());
     if (pcSketch) {
+        App::DocumentObject *oldRefAxis = pcRevolution->ReferenceAxis.getValue();
+        std::vector<std::string> oldSubRefAxis = pcRevolution->ReferenceAxis.getSubValues();
+
         int maxcount = pcSketch->getAxisCount()+2;
         if (num == 0)
             pcRevolution->ReferenceAxis.setValue(pcSketch, std::vector<std::string>(1,"V_Axis"));
@@ -132,22 +149,46 @@ void TaskRevolutionParameters::onAxisChanged(int num)
         }
         if (num < maxcount && ui->axis->count() > maxcount)
             ui->axis->setMaxCount(maxcount);
+
+        const std::vector<std::string> &newSubRefAxis = pcRevolution->ReferenceAxis.getSubValues();
+        if (oldRefAxis != pcSketch ||
+            oldSubRefAxis.size() != newSubRefAxis.size() ||
+            oldSubRefAxis[0] != newSubRefAxis[0]) {
+            bool reversed = pcRevolution->suggestReversed();
+            if (reversed != pcRevolution->Reversed.getValue()) {
+                pcRevolution->Reversed.setValue(reversed);
+                ui->checkBoxReversed->blockSignals(true);
+                ui->checkBoxReversed->setChecked(reversed);
+                ui->checkBoxReversed->blockSignals(false);
+            }
+        }
     }
-    pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+    if (updateView())
+        pcRevolution->getDocument()->recomputeFeature(pcRevolution);
 }
 
 void TaskRevolutionParameters::onMidplane(bool on)
 {
     PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
     pcRevolution->Midplane.setValue(on);
-    pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+    if (updateView())
+        pcRevolution->getDocument()->recomputeFeature(pcRevolution);
 }
 
 void TaskRevolutionParameters::onReversed(bool on)
 {
     PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
     pcRevolution->Reversed.setValue(on);
-    pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+    if (updateView())
+        pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+}
+
+void TaskRevolutionParameters::onUpdateView(bool on)
+{
+    if (on) {
+    PartDesign::Revolution* pcRevolution = static_cast<PartDesign::Revolution*>(RevolutionView->getObject());
+        pcRevolution->getDocument()->recomputeFeature(pcRevolution);
+    }
 }
 
 double TaskRevolutionParameters::getAngle(void) const
@@ -188,6 +229,11 @@ bool   TaskRevolutionParameters::getMidplane(void) const
 bool   TaskRevolutionParameters::getReversed(void) const
 {
     return ui->checkBoxReversed->isChecked();
+}
+
+const bool TaskRevolutionParameters::updateView() const
+{
+    return ui->checkBoxUpdateView->isChecked();
 }
 
 TaskRevolutionParameters::~TaskRevolutionParameters()
